@@ -53,6 +53,8 @@ const google = {
 
   // INI DIA KUNCI KONTAK YANG HILANG KEMARIN (FUNGSI INIT OTOMATIS)
   window.onload = () => {
+    const printToggle = document.getElementById('setEnablePrint');
+if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint') !== 'false');
     startLiveClock(); 
     const fpConfig = { dateFormat: "Y-m-d", disableMobile: "true" };
     flatpickr("#recapStartDate", fpConfig); flatpickr("#recapEndDate", fpConfig); flatpickr("#rfStartDate", fpConfig); flatpickr("#rfEndDate", fpConfig); flatpickr("#closingDateInput", fpConfig);
@@ -411,7 +413,11 @@ const google = {
     if(selectedPaymentMethod === 'CASH') printPaymentHtml += `<br>Cash: Rp ${cashGiven.toLocaleString('id-ID')}<br>Kembali: Rp ${change.toLocaleString('id-ID')}`; document.getElementById('printMethod').innerHTML = printPaymentHtml;
     try { JsBarcode("#printBarcode", trxId, {width: 1.5, height: 40, displayValue: true, fontSize: 12, margin: 0}); } catch(e) {}
     
-    document.body.classList.add('printing-receipt'); window.print(); setTimeout(() => document.body.classList.remove('printing-receipt'), 1000);
+    if (localStorage.getItem('screamous_autoprint') !== 'false') {
+  document.body.classList.add('printing-receipt'); 
+  window.print(); 
+  setTimeout(() => document.body.classList.remove('printing-receipt'), 1000);
+}
 
     if (navigator.onLine) {
       google.script.run
