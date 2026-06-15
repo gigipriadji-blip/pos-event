@@ -1,0 +1,44 @@
+
+  :root { --screamous-yellow: #F7A600; --screamous-dark: #121212; --screamous-card: #1c1d21; --screamous-border: #333333; --screamous-text: #E0E0E0; }
+  body { background-color: var(--screamous-dark) !important; color: var(--screamous-text) !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+  .navbar { background-color: var(--screamous-card) !important; border-bottom: 1px solid var(--screamous-border) !important; }
+  .navbar-brand { color: var(--screamous-yellow) !important; font-size: 1.5rem; font-weight: 800 !important; letter-spacing: 1px; }
+  .nav-link.active { color: var(--screamous-yellow) !important; border-bottom: 2px solid var(--screamous-yellow); font-weight: 600; }
+  .nav-link { color: #A0A0A0 !important; cursor: pointer; }
+  .nav-link:hover { color: #FFF !important; }
+  .card { background-color: var(--screamous-card) !important; border: 1px solid var(--screamous-border) !important; border-radius: 8px; }
+  .card-title { color: #FFFFFF !important; font-weight: 600; }
+  .btn-success, .btn-primary { background-color: var(--screamous-yellow) !important; color: #111 !important; border: none !important; font-weight: bold !important; border-radius: 6px; }
+  .btn-success:hover, .btn-primary:hover { background-color: #E59800 !important; }
+  .btn-outline-danger { color: #ff4a4a !important; border-color: #ff4a4a !important; background-color: transparent !important; }
+  .btn-outline-danger:hover { background-color: rgba(255, 74, 74, 0.1) !important; }
+  .form-control, .form-select { background-color: var(--screamous-dark) !important; border: 1px solid var(--screamous-border) !important; color: #FFF !important; }
+  .form-control:focus, .form-select:focus { border-color: var(--screamous-yellow) !important; box-shadow: 0 0 0 0.25rem rgba(247, 166, 0, 0.25) !important; }
+  ::-webkit-calendar-picker-indicator { filter: invert(1); }
+  .table { color: var(--screamous-text) !important; }
+  .table th { color: #A0A0A0 !important; border-bottom: 1px solid var(--screamous-border) !important; }
+  .table td { border-bottom: 1px solid #2A2A2A !important; }
+  .list-group-item { background-color: var(--screamous-card) !important; border-color: var(--screamous-border) !important; color: var(--screamous-text) !important; }
+  .list-group-item:hover { background-color: #2A2A2E !important; }
+  .text-warning { color: var(--screamous-yellow) !important; }
+  .text-info { color: #A0A0A0 !important; }
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: var(--screamous-dark); }
+  ::-webkit-scrollbar-thumb { background: var(--screamous-border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #555; }
+  input[type="date"] { cursor: pointer; }
+  
+  .input-giant { height: 50px; font-size: 1.5rem !important; }
+  .btn-kasir { font-size: 1rem !important; padding: 0.6rem 0.2rem !important; font-weight: 600; }
+
+  #printArea, #printClosingArea { display: none; }
+  @media print {
+    @page { margin: 0; size: 80mm auto; }
+    html, body { height: auto !important; margin: 0 !important; padding: 0 !important; background-color: white !important; overflow: visible !important; }
+    /* Ubah padding dari "2px 5px" menjadi "0px 5px" dan paksa margin 0 */
+    body.printing-receipt #printArea { display: block !important; width: 100%; margin: 0 !important; padding: 0px 5px !important; color: black !important; background: white !important; }
+    body.printing-closing #printClosingArea { display: block !important; width: 100%; margin: 0 !important; padding: 0px 5px !important; color: black !important; background: white !important; }
+    nav, .container-fluid, .modal, .modal-backdrop { display: none !important; }
+  }
+  .page-section { display: none; }
+  .page-section.active { display: block; }
