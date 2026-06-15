@@ -1,3 +1,61 @@
+// =========================================================================
+// JEMBATAN OTOMATIS: GITHUB TO GOOGLE SHEETS API
+// =========================================================================
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzDoPLysvwvTLbOG042-EQLYv5NKTOSj4MtvO-ckQxJfAdYnNLl2iDQcjCyWdKYxG6O/exec";
+
+const google = {
+  script: {
+    run: {
+      withSuccessHandler: function(successCallback) {
+        return {
+          withFailureHandler: function(failureCallback) {
+            return createGasProxy(successCallback, failureCallback);
+          },
+          ...createGasProxy(successCallback, console.error)
+        };
+      },
+      withFailureHandler: function(failureCallback) {
+        return {
+          withSuccessHandler: function(successCallback) {
+            return createGasProxy(successCallback, failureCallback);
+          },
+          ...createGasProxy(console.log, failureCallback)
+        };
+      },
+      ...createGasProxy(console.log, console.error)
+    }
+  }
+};
+
+function createGasProxy(successCallback, failureCallback) {
+  return new Proxy({}, {
+    get: function(target, action) {
+      return function(...args) {
+        fetch(WEB_APP_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action: action,
+            data: args[0]
+          })
+        })
+        .then(response => response.json())
+        .then(result => {
+          if (result.status === 'success') {
+            if (typeof successCallback === 'function') successCallback(result.data);
+          } else {
+            if (typeof failureCallback === 'function') failureCallback(result.message);
+          }
+        })
+        .catch(err => {
+          if (typeof failureCallback === 'function') failureCallback(err);
+        });
+      };
+    }
+  });
+}
+// =========================================================================
+// KODE ASLI APP.JS ANDA DIMULAI DI BAWAH INI
+// =========================================================================
 
   let inventoryData = []; let cart = []; let freeCart = []; 
   let recapData = []; let freeLogData = [];
