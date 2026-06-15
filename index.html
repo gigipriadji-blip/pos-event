@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="id" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <title>SCREAMOUS EVENT POS</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+  
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.0/dist/JsBarcode.all.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <link rel="stylesheet" type="text/css" href="https://npmcdn.com/flatpickr/dist/themes/dark.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark border-bottom border-secondary mb-4">
+  <div class="container-fluid">
+    <a class="navbar-brand fw-bold" href="#" id="navBrandText">SCREAMOUS EVENT</a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
+    <div class="collapse navbar-collapse" id="navbarNav">
+      <ul class="navbar-nav me-auto">
+            <li class="nav-item"><a class="nav-link active" onclick="showPage('posPage')">POS</a></li>
+            <li class="nav-item"><a class="nav-link" onclick="showPage('recapPage'); loadRecap();">Rekap Jual</a></li>
+            <li class="nav-item"><a class="nav-link" onclick="showPage('freeStuffPage'); loadFreeStuffInventory();">Free Stuff</a></li>
+            <li class="nav-item"><a class="nav-link" onclick="showPage('recapFreePage'); loadFreeStuffLogTable();">Rekap Free</a></li>
+            <li class="nav-item"><a class="nav-link" onclick="showPage('inventoryPage'); loadInventoryTable();">Inventory</a></li>
+            <li class="nav-item"><a class="nav-link" onclick="showPage('inputPage')">Input Item</a></li>
+            <li class="nav-item"><a class="nav-link" onclick="showPage('settingPage'); loadSettingsForm();">Setting</a></li>
+          </ul>
+      
+      <span id="syncBadgeContainer" style="display:none;" class="me-3">
+        <span id="syncCountBadge" class="badge bg-danger p-2 fs-6">⚠️ 0 Transaksi Pending</span>
+        <button class="btn btn-sm btn-success fw-bold ms-1 text-dark" onclick="syncOfflineTransactions()"><i class="bi bi-cloud-upload"></i> Sync Data</button>
+      </span>
+
+      <span id="liveClock" class="navbar-text text-info fw-bold ms-auto d-none d-lg-block" style="font-size: 1.5rem;"></span>
+      <button class="btn btn-sm btn-outline-warning ms-3 border-secondary align-self-center" onclick="toggleFullScreen()" title="Mode Layar Penuh"><i class="bi bi-arrows-fullscreen"></i></button>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid">
+  
+  <div id="posPage" class="page-section active">
+    <div class="row">
+      <div class="col-md-8">
+        <div class="card mb-3 border-secondary">
+          <div class="card-body">
+            <h5 class="card-title">Scanner / Manual Input</h5>
+            <input type="text" id="posSearch" class="form-control mb-3" placeholder="Scan Barcode / ketik lalu Enter..." autofocus tabindex="1">
+            <div class="table-responsive" style="height: 320px; overflow-y: auto;">
+              <table class="table table-hover table-sm align-middle mb-0">
+                <thead style="position: sticky; top: 0; background-color: var(--screamous-card); z-index: 1;">
+                  <tr><th>Article</th><th>Sz</th><th>Price</th><th>Qty</th><th>Subtotal</th><th>Act</th></tr>
+                </thead>
+                <tbody id="cartTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="card mb-3 border-secondary">
+          <div class="card-body">
+            <h5 class="card-title text-info">Daftar Artikel</h5>
+            <input type="text" id="posFilterList" class="form-control form-control-sm mb-3" placeholder="Cari nama/kode artikel..." oninput="filterPosList()">
+            <div class="list-group overflow-auto" id="posInventoryList" style="max-height: 300px;"></div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="col-md-4">
+        <div class="card border-secondary">
+          <div class="card-body">
+            <h5 class="card-title d-flex justify-content-between align-items-center">
+  Payment 
+  <span id="promoIndicatorBadge" class="badge bg-secondary text-light" style="font-size: 11px;">MANUAL MODE</span>
+</h5>
+            <div class="mb-1 d-flex justify-content-between text-info border-bottom border-secondary pb-1 fs-5"><span>Total Item:</span> <strong id="cartTotalQty">0 Pcs</strong></div>
+            <div class="mb-2 mt-2 d-flex justify-content-between"><span class="small">Subtotal:</span> <strong id="cartSubtotal" class="small">Rp 0</strong></div>
+            
+            <div class="row mb-2 g-1">
+              <div class="col-12">
+                <select id="discountType" class="form-select form-select-sm" onchange="toggleDiscountUI(); calculateTotal();">
+                  <option value="nominal">Diskon (Rp)</option>
+                  <option value="percent">Diskon (%)</option>
+                  <option value="override" selected>Harga Pas (Rp)</option>
+                </select>
+              </div>
+              <div class="col-12 mt-1">
+                <input type="number" id="discountValue" class="form-control fw-bold text-warning input-giant text-center" placeholder="0" oninput="calculateTotal()" tabindex="2">
+              </div>
+              <div class="col-12 mt-2" id="discountShortcuts">
+                <div class="d-flex flex-wrap gap-1">
+                   <button class="btn btn-outline-info btn-kasir flex-grow-1 border-secondary" onclick="setDiscount(100000)">100k</button>
+                   <button class="btn btn-outline-info btn-kasir flex-grow-1 border-secondary" onclick="setDiscount(150000)">150k</button>
+                   <button class="btn btn-outline-info btn-kasir flex-grow-1 border-secondary" onclick="setDiscount(200000)">200k</button>
+                   <button class="btn btn-outline-info btn-kasir flex-grow-1 border-secondary" onclick="setDiscount(250000)">250k</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="mb-3 d-flex justify-content-between fs-4 text-warning border-top border-secondary pt-2"><span>Total:</span> <strong id="cartTotal">Rp 0</strong></div>
+            
+            <div class="mb-3">
+              <label class="form-label small text-info d-block mb-2 fw-bold">Metode Pembayaran</label>
+              <div class="d-flex gap-1" id="paymentBtnGroup">
+                <button type="button" class="btn btn-outline-warning btn-kasir flex-grow-1" id="btnPayCASH" onclick="selectPaymentMethod('CASH')">CASH</button>
+                <button type="button" class="btn btn-outline-warning btn-kasir flex-grow-1" id="btnPayQRIS" onclick="selectPaymentMethod('QRIS')">QRIS</button>
+                <button type="button" class="btn btn-outline-warning btn-kasir flex-grow-1" id="btnPayCARD" onclick="selectPaymentMethod('CARD')">CARD</button>
+                <button type="button" class="btn btn-outline-warning btn-kasir flex-grow-1" id="btnPayTRANSFER" onclick="selectPaymentMethod('TRANSFER')">TRANSFER</button>
+              </div>
+            </div>
+            
+            <div id="cashUI" style="display:none;">
+              <label class="form-label small text-info mb-1">Uang Diterima (Rp)</label>
+              <input type="number" id="cashGiven" class="form-control fw-bold text-success input-giant text-center mb-2" placeholder="0" oninput="calculateChange()">
+              <div class="d-flex flex-wrap gap-1 mb-2">
+                <button class="btn btn-outline-warning btn-kasir flex-grow-1" onclick="setCash('pas')">Uang Pas</button>
+                <button class="btn btn-outline-light btn-kasir flex-grow-1 border-secondary" onclick="setCash(100000)">100k</button>
+                <button class="btn btn-outline-light btn-kasir flex-grow-1 border-secondary" onclick="setCash(200000)">200k</button>
+                <button class="btn btn-outline-light btn-kasir flex-grow-1 border-secondary" onclick="setCash(300000)">300k</button>
+                <button class="btn btn-outline-light btn-kasir flex-grow-1 border-secondary" onclick="setCash(500000)">500k</button>
+              </div>
+              <div class="mb-3 d-flex justify-content-between fs-5 text-success"><span>Kembalian:</span> <strong id="changeAmount">Rp 0</strong></div>
+            </div>
+            
+            <input type="text" id="paymentNote" class="form-control form-control-sm mb-3 border-warning" placeholder="Catatan transaksi (opsional)..." style="display:none;">
+            
+            <button class="btn btn-success w-100 mb-2 fw-bold fs-5" onclick="checkout()" style="padding: 10px;">BAYAR & PRINT</button>
+            <button class="btn btn-outline-danger w-100 fw-bold" onclick="clearCart()">Clear Cart</button>
+
+            <hr class="border-secondary mt-3 mb-3">
+            <button class="btn btn-outline-info w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#closingModal" onclick="loadClosingData()"><i class="bi bi-journal-check"></i> Menu Closing Harian</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="freeStuffPage" class="page-section">
+    <div class="row">
+      <div class="col-md-8">
+        <div class="card mb-3 border-secondary">
+          <div class="card-body">
+            <h5 class="card-title text-success"><i class="bi bi-gift"></i> Scanner Free Stuff</h5>
+            <input type="text" id="freeSearch" class="form-control mb-3 border-success" placeholder="Scan Barcode untuk diproses Free Stuff..." onkeypress="if(event.key === 'Enter'){ searchFreeItem(this.value); this.value=''; }">
+            <div class="table-responsive" style="height: 320px; overflow-y: auto;">
+              <table class="table table-hover table-sm align-middle mb-0">
+                <thead style="position: sticky; top: 0; background-color: var(--screamous-card); z-index: 1;">
+                  <tr class="text-success"><th>Article</th><th>Sz</th><th>Nominal</th><th>Qty</th><th>Subtotal Nominal</th><th>Act</th></tr>
+                </thead>
+                <tbody id="freeCartTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="card mb-3 border-secondary">
+          <div class="card-body">
+            <h5 class="card-title text-success">Daftar Artikel (Inventory)</h5>
+            <input type="text" id="freeFilterList" class="form-control form-control-sm mb-3 border-success" placeholder="Cari nama/kode artikel..." oninput="filterFreePosList()">
+            <div class="list-group overflow-auto" id="freeInventoryList" style="max-height: 250px;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card border-secondary">
+          <div class="card-body">
+            <h5 class="card-title text-success">Proses Pengeluaran</h5>
+            <div class="mb-3 d-flex justify-content-between text-info border-bottom border-secondary pb-2 fs-5"><span>Total Qty (Pcs):</span> <strong id="freeTotalQty" class="text-white">0 Pcs</strong></div>
+            <div class="mb-3 d-flex justify-content-between text-warning border-bottom border-secondary pb-2"><span class="small">Total Nominal (Rp):</span> <strong id="freeTotalNominal" class="fs-5">Rp 0</strong></div>
+            <div class="mb-3">
+              <label class="small text-muted mb-1">Kategori Pengeluaran</label>
+              <select id="freeCategory" class="form-select border-secondary">
+                <option value="Promo (Hadiah/Giveaway)">Promo (Hadiah/Giveaway)</option>
+                <option value="Free Stuff Pegawai">Free Stuff Pegawai</option>
+                <option value="Lain-lain / Reject">Lain-lain / Reject</option>
+              </select>
+            </div>
+            <div class="mb-4">
+              <label class="small text-muted mb-1">Catatan Tambahan (Wajib)</label>
+              <input type="text" id="freeNote" class="form-control border-secondary" placeholder="Tulis rincian alasan disini...">
+            </div>
+            <button class="btn btn-outline-success w-100 mb-2 fw-bold fs-5" onclick="checkoutFreeStuff()">PROSES FREE STUFF</button>
+            <button class="btn btn-outline-danger w-100 fw-bold" onclick="clearFreeCart()">Clear Table</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="recapFreePage" class="page-section">
+    <div class="card border-secondary">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+          <h5 class="card-title text-success align-middle mb-0"><i class="bi bi-clock-history"></i> Rekap Free Stuff<span id="rfTotalQtyBadge" class="badge bg-success ms-2">0 Pcs</span><span id="rfTotalNominalBadge" class="badge bg-warning text-dark ms-1">Rp 0</span></h5>
+          <div class="d-flex gap-2 align-items-end">
+            <div><label class="small text-muted" style="font-size:10px;">Dari Tanggal</label><input type="date" id="rfStartDate" class="form-control form-control-sm bg-light text-dark fw-bold"></div>
+            <div><label class="small text-muted" style="font-size:10px;">Sampai Tanggal</label><input type="date" id="rfEndDate" class="form-control form-control-sm bg-light text-dark fw-bold"></div>
+            <button class="btn btn-sm btn-outline-success fw-bold" onclick="filterFreeLog()">Filter</button>
+            <button class="btn btn-sm btn-info fw-bold ms-2" onclick="printFreeRecapData()"><i class="bi bi-printer"></i> Print</button>
+            <button class="btn btn-sm btn-success fw-bold" onclick="exportExcel('recapFree', 'Rekap_FreeStuff')"><i class="bi bi-file-earmark-excel"></i> Excel</button>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm table-striped">
+            <thead><tr class="text-info"><th>Tanggal Log</th><th>Article</th><th>Sz</th><th>Qty</th><th>Nominal</th><th>Kategori</th><th>Catatan</th></tr></thead>
+            <tbody id="recapFreeTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="recapPage" class="page-section">
+    <div class="card">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+          <h5 class="card-title align-middle mb-0">Rekap Penjualan <span id="recapTotalBadge" class="badge bg-success ms-2">Rp 0</span><span id="recapQtyBadge" class="badge bg-info text-dark ms-1">0 Pcs</span><span id="recapTrxBadge" class="badge bg-secondary ms-1">0 Trx</span></h5>
+          <div class="d-flex gap-2 align-items-end">
+             <div><label class="small text-muted" style="font-size:10px;">Dari Tanggal</label><input type="date" id="recapStartDate" class="form-control form-control-sm bg-light text-dark fw-bold"></div>
+             <div><label class="small text-muted" style="font-size:10px;">Sampai Tanggal</label><input type="date" id="recapEndDate" class="form-control form-control-sm bg-light text-dark fw-bold"></div>
+             <button class="btn btn-sm btn-outline-info fw-bold" onclick="filterRecap()">Filter</button>
+             <input type="text" id="recapSearch" class="form-control form-control-sm ms-2" placeholder="Cari No. TRX..." oninput="filterRecap()" style="width: 140px;">
+             <button class="btn btn-sm btn-info fw-bold" onclick="printRecapData()"><i class="bi bi-printer"></i> Print</button>
+             <button class="btn btn-sm btn-success fw-bold" onclick="exportExcel('recapSales', 'Rekap_Penjualan')"><i class="bi bi-file-earmark-excel"></i> Excel</button>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead><tr><th>No</th><th>Trx ID</th><th>Date</th><th>Method</th><th>Note</th><th>Total</th></tr></thead>
+            <tbody id="recapTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="inventoryPage" class="page-section">
+    <div class="card">
+      <div class="card-body">
+        <div class="d-flex justify-content-between mb-3 align-items-center">
+          <h5 class="card-title mb-0">Inventory Database <span id="invTotalBadge" class="badge bg-warning text-dark ms-2">0 Pcs</span></h5>
+          <div class="d-flex gap-2">
+            <input type="text" id="invSearch" class="form-control form-control-sm" placeholder="Search item..." oninput="filterInventory()" style="width: 200px;">
+            <button class="btn btn-sm btn-info fw-bold" onclick="printInventoryData()"><i class="bi bi-printer"></i> Print</button>
+            <button class="btn btn-sm btn-success fw-bold" onclick="exportExcel('inventory', 'Database_Inventory')"><i class="bi bi-file-earmark-excel"></i> Excel</button>
+            <button class="btn btn-sm btn-warning fw-bold text-dark ms-2" data-bs-toggle="modal" data-bs-target="#restockModal">Restock Manual</button>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-striped align-middle">
+            <thead><tr><th>Barcode</th><th>Article Code</th><th>Article Name</th><th>Size</th><th>Price</th><th>Harga Promo</th><th>Stock</th><th>Aksi</th></tr></thead>
+            <tbody id="invTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="inputPage" class="page-section">
+    <div class="card mx-auto border-secondary" style="max-width: 900px;">
+      <div class="card-body">
+        <h5 class="card-title mb-4">Register Article Baru</h5>
+        <div class="mb-4 p-3 bg-dark border border-success rounded">
+          <h6 class="text-success mb-3"><i class="bi bi-file-earmark-excel"></i> Bulk Import via Excel</h6>
+          <div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
+             <button class="btn btn-sm btn-outline-light border-secondary" onclick="downloadTemplate()">1. Download Template</button>
+             <input type="file" id="excelFile" class="form-control form-control-sm w-auto" accept=".xlsx, .xls">
+             <button id="btnUploadExcel" class="btn btn-sm btn-success fw-bold" onclick="processExcel()">2. Upload & Import</button>
+          </div>
+        </div>
+        <form id="inputForm" onsubmit="event.preventDefault(); submitInventory();">
+          <div class="row g-4">
+            <div class="col-md-6">
+              <h6 class="text-info mb-3 border-bottom border-secondary pb-2">1. Data Artikel</h6>
+              <div class="mb-3"><label class="text-warning fw-bold mb-1 small">Pilih Artikel (Jika Sudah Ada)</label><select id="iSelectArticle" class="form-select form-select-sm border-warning" onchange="fillFromDropdown()"><option value="">-- Buat Artikel Baru --</option></select></div>
+              <div class="mb-3"><label class="small">Article Code</label><input type="text" id="iArtCode" class="form-control form-control-sm" required></div>
+              <div class="mb-3"><label class="small">Article Name</label><input type="text" id="iArtName" class="form-control form-control-sm" required></div>
+              <div class="mb-3"><label class="small">Price (Rp)</label><input type="number" id="iPrice" class="form-control form-control-sm" required></div>
+            </div>
+            <div class="col-md-6">
+              <h6 class="text-info mb-3 border-bottom border-secondary pb-2">2. Spesifikasi & Barcode</h6>
+              <div class="mb-3"><label class="small">Size</label><input type="text" id="iSize" class="form-control form-control-sm" required></div>
+              <div class="mb-3"><label class="small">Barcode Number (Scan)</label><input type="text" id="iBarcode" class="form-control form-control-sm border-info" required></div>
+              
+              <div class="mb-3"><label class="small text-success fw-bold">Category (Opsional)</label><input type="text" id="iCategory" class="form-control form-control-sm border-success" placeholder="Misal: Jaket, T-Shirt, Celana..."></div>
+              <div class="mb-3"><label class="small text-success fw-bold">Color (Opsional)</label><input type="text" id="iColor" class="form-control form-control-sm border-success" placeholder="Misal: Black, Navy, White..."></div>
+
+              <div class="mb-4"><label class="small">Stock Tambahan / Awal</label><input type="number" id="iStock" class="form-control form-control-sm" required></div>
+              <div class="mt-4 pt-2"><button type="submit" class="btn btn-primary w-100 fw-bold">Simpan ke Inventory</button></div>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="settingPage" class="page-section">
+    <div class="card border-secondary mx-auto" style="max-width: 650px;">
+      <div class="card-body">
+        <h5 class="card-title text-warning mb-4"><i class="bi bi-gear"></i> Pengaturan Struk Belanja</h5>
+        <div class="p-4 bg-dark rounded border border-secondary mb-3">
+          <div class="mb-3"><label class="form-label fw-bold small text-info">Nama Toko Utama</label><input type="text" id="setShopName" class="form-control"></div>
+          <div class="mb-3"><label class="form-label fw-bold small text-info">Nama Event</label><input type="text" id="setEventName" class="form-control"></div>
+          <div class="mb-4"><label class="form-label fw-bold small text-info">Pesan Footer</label><input type="text" id="setFooter" class="form-control"></div>
+        
+        <div class="form-check form-switch mt-3 mb-3">
+          <input class="form-check-input" type="checkbox" id="setPromoMode" onchange="handlePromoToggle(this.checked)">
+          <label class="form-check-label fw-bold text-warning" for="setPromoMode">🔥 Aktifkan Prefilled Discount (Harga Promo Event)</label>
+        </div>
+
+      </div> ```
+
+        </div>
+        
+        <h5 class="card-title text-success mb-3"><i class="bi bi-keyboard"></i> Pengaturan Tombol Shortcut Kasir</h5>
+        <div class="p-4 bg-dark rounded border border-secondary">
+          <div class="row align-items-center mb-2">
+            <div class="col-4"><span class="small fw-bold">Shortcut CASH:</span></div>
+            <div class="col-8"><button type="button" id="btnBindCASH" class="btn btn-sm btn-outline-warning w-100 fw-bold" onclick="startKeyScan('CASH')">F8</button></div>
+          </div>
+          <div class="row align-items-center mb-2">
+            <div class="col-4"><span class="small fw-bold">Shortcut QRIS:</span></div>
+            <div class="col-8"><button type="button" id="btnBindQRIS" class="btn btn-sm btn-outline-warning w-100 fw-bold" onclick="startKeyScan('QRIS')">F9</button></div>
+          </div>
+          <div class="row align-items-center mb-2">
+            <div class="col-4"><span class="small fw-bold">Shortcut CARD:</span></div>
+            <div class="col-8"><button type="button" id="btnBindCARD" class="btn btn-sm btn-outline-warning w-100 fw-bold" onclick="startKeyScan('CARD')">F10</button></div>
+          </div>
+          <div class="row align-items-center mb-3">
+            <div class="col-4"><span class="small fw-bold">Shortcut TRANSFER:</span></div>
+            <div class="col-8"><button type="button" id="btnBindTRANSFER" class="btn btn-sm btn-outline-warning w-100 fw-bold" onclick="startKeyScan('TRANSFER')">F11</button></div>
+          </div>
+          <button class="btn btn-warning text-dark w-100 fw-bold btn-lg mt-3" onclick="submitSettings()">SIMPAN SEMUA PENGATURAN</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content bg-dark text-light border-secondary">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title text-warning">Detail Transaksi <span id="dtTrxId" class="text-white fs-6 ms-2"></span></h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="detailLoading" class="text-center my-4" style="display:none;"><div class="spinner-border text-warning" role="status"></div></div>
+        <div id="detailContent">
+          <div class="table-responsive">
+            <table class="table table-sm table-dark table-hover border-secondary align-middle">
+              <thead><tr class="text-info"><th>Barcode</th><th>Article Name</th><th>Sz</th><th>Qty</th><th>Price</th><th>Subtotal</th></tr></thead>
+              <tbody id="dtTableBody"></tbody>
+            </table>
+          </div>
+          <div class="row mt-3 border-top border-secondary pt-2">
+            <div class="col-sm-6">
+              <span class="text-muted small">Metode Pembayaran: </span><strong id="dtMethod"></strong><br>
+              <span id="dtNoteWrapper" style="display:none;"><span class="text-muted small">Catatan: </span><strong id="dtNote" class="text-info"></strong></span>
+            </div>
+            <div class="col-sm-6 text-end"> 
+              <div>Total Sebelum Diskon: <strong id="dtSubtotal">Rp 0</strong></div>
+              <div class="text-danger">Diskon: <strong id="dtDiscount">Rp 0</strong></div>
+              <div class="fs-5 text-warning mt-1">Total Bayar: <strong id="dtGrandTotal">Rp 0</strong></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Tutup</button>
+        <button type="button" class="btn btn-danger fw-bold me-auto" onclick="voidTransaction()">VOID TRANSAKSI</button>
+        <button type="button" class="btn btn-warning fw-bold" onclick="reprintReceipt()">Print Ulang Struk</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="restockModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark text-light border-secondary">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title text-warning"><i class="bi bi-box-arrow-in-down"></i> Form Restock</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label small">Scan Barcode / Input Manual</label>
+          <input type="text" id="rsBarcode" class="form-control border-warning" autofocus onchange="findRestockItem(this.value)">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small text-muted">Nama Artikel</label>
+          <input type="text" id="rsName" class="form-control bg-secondary text-light" readonly>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small text-info fw-bold">Qty Tambahan (Pcs)</label>
+          <input type="number" id="rsQty" class="form-control border-info" placeholder="0">
+        </div>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Batal</button>
+        <button type="button" class="btn btn-warning fw-bold" onclick="submitRestock()" id="btnSubmitRestock" disabled>Simpan Restock</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="closingModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content bg-dark text-light border-secondary">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title text-warning"><i class="bi bi-journal-check"></i> Laporan Closing Harian</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex gap-3 align-items-end mb-4 bg-dark p-3 rounded border border-secondary">
+          <div class="flex-grow-1">
+            <label class="small text-info mb-1">Pilih Tanggal Closing</label>
+            <input type="date" id="closingDateInput" class="form-control form-control-sm bg-light text-dark fw-bold" onchange="loadClosingData()">
+          </div>
+          <button class="btn btn-sm btn-outline-light" onclick="loadClosingData()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+        </div>
+        <div class="row g-3 mb-4">
+          <div class="col-6"><div class="p-3 bg-dark border border-secondary rounded text-center"><div class="small text-muted">Total Penjualan (Kotor)</div><h4 class="text-white mt-1 mb-0" id="closeGross">Rp 0</h4></div></div>
+          <div class="col-6"><div class="p-3 bg-dark border border-danger rounded text-center"><div class="small text-danger">Total Diskon Diberikan</div><h4 class="text-danger mt-1 mb-0" id="closeDisc">Rp 0</h4></div></div>
+          <div class="col-6"><div class="p-3 bg-dark border border-warning rounded text-center"><div class="small text-warning">Total Omzet Bersih</div><h3 class="text-warning mt-1 mb-0 fw-bold" id="closeNet">Rp 0</h3></div></div>
+          <div class="col-6"><div class="p-3 bg-dark border border-info rounded text-center"><div class="small text-info">Total Barang Terjual</div><h3 class="text-info mt-1 mb-0 fw-bold" id="closeQty">0 Pcs</h3></div></div>
+        </div>
+        <h6 class="text-muted border-bottom border-secondary pb-2 mb-3">Rincian Metode Pembayaran</h6>
+        <div class="table-responsive mb-2">
+          <table class="table table-sm table-dark align-middle">
+            <tbody>
+              <tr><td class="text-light">Tunai (CASH)</td><td class="text-end fw-bold" id="closeCash">Rp 0</td></tr>
+              <tr><td class="text-light">EDC (CARD)</td><td class="text-end fw-bold" id="closeCard">Rp 0</td></tr>
+              <tr><td class="text-light">QRIS</td><td class="text-end fw-bold" id="closeQris">Rp 0</td></tr>
+              <tr><td class="text-light">Bank Transfer</td><td class="text-end fw-bold" id="closeTransfer">Rp 0</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Tutup</button>
+        <button type="button" class="btn btn-warning fw-bold" onclick="printClosingReport()">🖨️ PRINT STRUK CLOSING</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="printArea">
+  <h3 style="text-align:center;" id="pShopName">SCREAMOUS</h3>
+  <p style="text-align:center; font-size:12px;"><span id="pEventName">Event Pop-up Store</span><br><span id="printDate"></span></p>
+  <hr>
+  <table style="width:100%; font-size:14px; margin-bottom:10px;" id="printCart"></table>
+  <hr>
+  <div style="text-align:right; font-size:14px;">
+    <div>Subtotal: <span id="printSub"></span></div>
+    <div>Discount: <span id="printDisc"></span></div>
+    <div><strong>Total: <span id="printTotal"></span></strong></div>
+    <div style="margin-top:5px;">Method: <span id="printMethod"></span></div>
+  </div>
+  <hr>
+  <div style="text-align:center; margin-top:10px;"><svg id="printBarcode"></svg></div>
+  <p style="text-align:center; font-size:12px;" id="pFooter">Thank you for shopping with us!</p>
+</div>
+
+<div id="printClosingArea">
+  <h3 style="text-align:center;" id="pcShopName">SCREAMOUS</h3>
+  <p style="text-align:center; font-size:12px;"><strong>CLOSING HARIAN</strong><br><span id="pcDateTitle"></span><br>Dicetak: <span id="pcPrintDate"></span></p>
+  <hr>
+  <div style="font-size:14px; margin-bottom:10px;">
+    <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Total Qty Terjual:</span> <strong id="pcQty">0</strong></div>
+    <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Total Kotor:</span> <span id="pcGross">0</span></div>
+    <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Total Diskon:</span> <span id="pcDisc">0</span></div>
+    <div style="display:flex; justify-content:space-between; margin-bottom:8px; font-weight:bold; font-size:16px;"><span>OMZET BERSIH:</span> <span id="pcNet">0</span></div>
+  </div>
+  <hr>
+  <p style="text-align:center; font-size:12px; font-weight:bold; margin-bottom:5px;">RINCIAN METODE BAYAR</p>
+  <table style="width:100%; font-size:14px; margin-bottom:10px;">
+    <tr><td>CASH</td><td style="text-align:right;" id="pcCash">0</td></tr>
+    <tr><td>CARD (EDC)</td><td style="text-align:right;" id="pcCard">0</td></tr>
+    <tr><td>QRIS</td><td style="text-align:right;" id="pcQris">0</td></tr>
+    <tr><td>TRANSFER</td><td style="text-align:right;" id="pcTransfer">0</td></tr>
+  </table>
+  <hr>
+  <p style="text-align:center; font-size:12px;">=== END OF REPORT ===</p>
+</div>
+
+<link rel="stylesheet" href="style.css">
+<?!= include('Scripts_Admin'); ?>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<div class="modal fade" id="promoModal" tabindex="-1" aria-hidden="true">
+     <div class="modal-dialog modal-dialog-centered">
+       <div class="modal-content bg-dark text-light border-secondary">
+         <div class="modal-header border-secondary">
+           <h5 class="modal-title text-warning"><i class="bi bi-tag-fill"></i> Set Harga Promo Event</h5>
+           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+         </div>
+         <div class="modal-body">
+           <input type="hidden" id="pmBarcode">
+           <div class="mb-3">
+             <label class="form-label text-muted small">Nama Artikel</label>
+             <input type="text" id="pmName" class="form-control bg-secondary text-white border-0" readonly>
+           </div>
+           <div class="mb-3">
+             <label class="form-label small">Harga Promo / Event (Rp)</label>
+             <input type="number" id="pmPromoPrice" class="form-control bg-dark text-success border-success fw-bold" placeholder="Contoh: 200000">
+             <small class="text-muted" style="font-size: 11px;">Kosongkan kolom ini jika artikel kembali ke harga normal tag.</small>
+           </div>
+         </div>
+         <div class="modal-footer border-secondary">
+           <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+           <button type="button" id="btnSubmitPromo" class="btn btn-sm btn-warning" onclick="submitPromoPrice()">Simpan Harga Promo</button>
+         </div>
+       </div>
+     </div>
+   </div>
+
+<script>
+  function toggleFullScreen() {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch((err) => {
+        console.log("Gagal masuk mode layar penuh: " + err.message);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  }
+
+</script>
+</body>
+</html>
