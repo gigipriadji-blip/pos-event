@@ -1,58 +1,43 @@
 // =========================================================================
-// JEMBATAN OTOMATIS: GITHUB TO GOOGLE SHEETS API
+// JEMBATAN OTOMATIS V2: GITHUB TO GOOGLE SHEETS API
 // =========================================================================
 const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzDoPLysvwvTLbOG042-EQLYv5NKTOSj4MtvO-ckQxJfAdYnNLl2iDQcjCyWdKYxG6O/exec";
 
-const google = {
-  script: {
-    run: {
-      withSuccessHandler: function(successCallback) {
-        return {
-          withFailureHandler: function(failureCallback) {
-            return createGasProxy(successCallback, failureCallback);
-          },
-          ...createGasProxy(successCallback, console.error)
-        };
-      },
-      withFailureHandler: function(failureCallback) {
-        return {
-          withSuccessHandler: function(successCallback) {
-            return createGasProxy(successCallback, failureCallback);
-          },
-          ...createGasProxy(console.log, failureCallback)
-        };
-      },
-      ...createGasProxy(console.log, console.error)
-    }
-  }
-};
-
-function createGasProxy(successCallback, failureCallback) {
+function createGasProxy(successCb, failureCb) {
   return new Proxy({}, {
-    get: function(target, action) {
+    get: function(target, prop) {
+      if (prop === 'withSuccessHandler') {
+        return function(cb) { return createGasProxy(cb, failureCb); };
+      }
+      if (prop === 'withFailureHandler') {
+        return function(cb) { return createGasProxy(successCb, cb); };
+      }
       return function(...args) {
         fetch(WEB_APP_URL, {
           method: 'POST',
-          body: JSON.stringify({
-            action: action,
-            data: args[0]
-          })
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: prop, data: args[0] })
         })
-        .then(response => response.json())
-        .then(result => {
-          if (result.status === 'success') {
-            if (typeof successCallback === 'function') successCallback(result.data);
-          } else {
-            if (typeof failureCallback === 'function') failureCallback(result.message);
-          }
+        .then(r => r.json())
+        .then(res => {
+          if(res.status === 'success' && successCb) successCb(res.data);
+          if(res.status === 'error' && failureCb) failureCb(res.message);
         })
         .catch(err => {
-          if (typeof failureCallback === 'function') failureCallback(err);
+          console.error("Gagal terhubung ke Database:", err);
+          if(failureCb) failureCb(err);
         });
       };
     }
   });
 }
+
+const google = {
+  script: {
+    run: createGasProxy(null, null)
+  }
+};
+// =========================================================================
 // =========================================================================
 // KODE ASLI APP.JS ANDA DIMULAI DI BAWAH INI
 // =========================================================================
@@ -473,3 +458,547 @@ function createGasProxy(successCallback, failureCallback) {
       google.script.run.withSuccessHandler(data => { inventoryData = data; renderPosList(inventoryData); loadInventoryTable(); }).getInventory();
     }).catch(err => { Swal.fire('Sync Gagal', 'Koneksi Sheets terputus tengah jalan, silakan coba lagi!', 'error'); });
   }
+
+ // --- ENGINE UTAMA SETTING STRUK & EXCEL ---
+  function applyReceiptSettings() { 
+    document.getElementById('pShopName').innerText = currentSettings.shopName; 
+    document.getElementById('pEventName').innerText = currentSettings.eventName; 
+    document.getElementById('pFooter').innerText = currentSettings.footer; 
+    document.getElementById('navBrandText').innerText = currentSettings.shopName + " EVENT"; 
+    document.getElementById('pcShopName').innerText = currentSettings.shopName; 
+  }
+  
+  function exportExcel(tableId, filename) {
+    if (tableId === 'recapSales') {
+        exportDetailedRecapSales(filename);
+        return;
+    }
+    
+    let ws_data = [];
+    if(tableId === 'inventory') { 
+      ws_data.push(['Barcode', 'Article Code', 'Article Name', 'Size', 'Price', 'Stock']); 
+      const rows = document.querySelectorAll('#invTableBody tr'); 
+      rows.forEach(r => { 
+        const cells = r.querySelectorAll('td'); 
+        if(cells.length >= 6) ws_data.push([cells[0].innerText, cells[1].innerText, cells[2].innerText, cells[3].innerText, cells[4].innerText, cells[5].innerText]); 
+      }); 
+    } 
+    else if(tableId === 'recapFree') { 
+      ws_data.push(['Tanggal Log', 'Article', 'Size', 'Qty', 'Nominal', 'Kategori', 'Catatan']); 
+      const rows = document.querySelectorAll('#recapFreeTableBody tr'); 
+      rows.forEach(r => { 
+        const cells = r.querySelectorAll('td'); 
+        if(cells.length >= 7) ws_data.push([cells[0].innerText, cells[1].innerText.replace(/\n/g, ' - '), cells[2].innerText, cells[3].innerText, cells[4].innerText, cells[5].innerText, cells[6].innerText]); 
+      }); 
+    }
+    if(ws_data.length <= 1) return Swal.fire('Kosong!', 'Tidak ada data untuk diekspor.', 'warning'); 
+    const ws = XLSX.utils.aoa_to_sheet(ws_data); 
+    const wb = XLSX.utils.book_new(); 
+    XLSX.utils.book_append_sheet(wb, ws, "Data"); 
+    XLSX.writeFile(wb, filename + "_" + new Date().toISOString().split('T')[0] + ".xlsx");
+  }
+
+  function exportDetailedRecapSales(filename) {
+      Swal.fire({ title: 'Menyiapkan Excel...', text: 'Menyusun rincian artikel, mohon tunggu.', didOpen: () => { Swal.showLoading(); }});
+      
+      const q = document.getElementById('recapSearch').value.toLowerCase().trim(); 
+      const startDate = document.getElementById('recapStartDate').value; 
+      const endDate = document.getElementById('recapEndDate').value;
+      
+      const filteredSales = recapData.filter(d => { 
+        const matchSearch = String(d[0]).toLowerCase().includes(q); 
+        let matchDate = true; 
+        if (startDate && endDate && d[1]) { 
+            const dDate = new Date(d[1]); 
+            if(!isNaN(dDate)) { 
+                const sDate = new Date(startDate); sDate.setHours(0,0,0,0); 
+                const eDate = new Date(endDate); eDate.setHours(23,59,59,999); 
+                matchDate = dDate >= sDate && dDate <= eDate; 
+            } 
+        } 
+        return matchSearch && matchDate; 
+      });
+
+      if(filteredSales.length === 0) return Swal.fire('Kosong!', 'Tidak ada data di rentang waktu ini.', 'warning');
+
+      google.script.run.withSuccessHandler(details => {
+          let ws_data = [];
+          ws_data.push(['LAPORAN DETAIL PENJUALAN']);
+          ws_data.push(['Periode:', startDate + ' s/d ' + endDate]);
+          ws_data.push([]);
+          ws_data.push(['No', 'Trx ID', 'Tanggal', 'Metode Bayar', 'Note', 'Artikel', 'Size', 'Qty', 'Harga', 'Subtotal', 'Diskon Trx', 'Total Bayar Trx']);
+          
+          let totalKotor = 0; let totalDiskon = 0; let totalBersih = 0; let totalPcs = 0;
+          let methodTotals = {};
+          let no = 1;
+
+          filteredSales.forEach(sale => {
+              const trxId = sale[0];
+              const date = new Date(sale[1]).toLocaleString('id-ID');
+              const method = sale[2];
+              const note = sale[3] ? sale[3] : '-';
+              const disc = Number(String(sale[4]).replace(/[^0-9]/g, '')) || 0;
+              const grand = Number(String(sale[5]).replace(/[^0-9]/g, '')) || 0;
+              const kotor = grand + disc;
+              
+              totalKotor += kotor; totalDiskon += disc; totalBersih += grand;
+              if(!methodTotals[method]) methodTotals[method] = 0;
+              methodTotals[method] += grand;
+
+              const trxDetails = details.filter(det => det[0] === trxId);
+              
+              if(trxDetails.length === 0) {
+                  ws_data.push([no, trxId, date, method, note, '-', '-', 0, 0, 0, disc, grand]);
+                  no++;
+              } else {
+                  trxDetails.forEach((det, idx) => {
+                      const qty = Number(det[4]) || 0;
+                      const price = Number(String(det[5]).replace(/[^0-9]/g, '')) || 0;
+                      const sub = Number(String(det[6]).replace(/[^0-9]/g, '')) || 0;
+                      totalPcs += qty;
+                      
+                      ws_data.push([
+                          (idx === 0) ? no : '', 
+                          (idx === 0) ? trxId : '', 
+                          (idx === 0) ? date : '', 
+                          (idx === 0) ? method : '', 
+                          (idx === 0) ? note : '', 
+                          det[2], det[3], qty, price, sub, 
+                          (idx === 0) ? disc : '', 
+                          (idx === 0) ? grand : ''
+                      ]);
+                  });
+                  no++;
+              }
+          });
+
+          ws_data.push([]); ws_data.push(['RINGKASAN TOTAL']);
+          ws_data.push(['Total Artikel Terjual:', totalPcs + ' Pcs']);
+          ws_data.push(['Penjualan Kotor:', totalKotor]);
+          ws_data.push(['Diskon Diberikan:', totalDiskon]);
+          ws_data.push(['Penjualan Bersih:', totalBersih]);
+          ws_data.push([]); ws_data.push(['RINCIAN METODE PEMBAYARAN']);
+          for(let m in methodTotals) { ws_data.push([m, methodTotals[m]]); }
+
+          const ws = XLSX.utils.aoa_to_sheet(ws_data); 
+          const wb = XLSX.utils.book_new(); 
+          XLSX.utils.book_append_sheet(wb, ws, "Rekap Detail"); 
+          XLSX.writeFile(wb, filename + "_Detail_" + new Date().toISOString().split('T')[0] + ".xlsx");
+          Swal.close();
+      }).getTrxDetails('');
+  }
+
+  function printRecapData() { 
+      Swal.fire({ title: 'Menyiapkan Cetakan...', text: 'Merapikan format rincian artikel...', didOpen: () => { Swal.showLoading(); }});
+      
+      const q = document.getElementById('recapSearch').value.toLowerCase().trim(); 
+      const startDate = document.getElementById('recapStartDate').value; 
+      const endDate = document.getElementById('recapEndDate').value;
+
+      const filteredSales = recapData.filter(d => { 
+        const matchSearch = String(d[0]).toLowerCase().includes(q); 
+        let matchDate = true; 
+        if (startDate && endDate && d[1]) { 
+            const dDate = new Date(d[1]); 
+            if(!isNaN(dDate)) { 
+                const sDate = new Date(startDate); sDate.setHours(0,0,0,0); 
+                const eDate = new Date(endDate); eDate.setHours(23,59,59,999); 
+                matchDate = dDate >= sDate && dDate <= eDate; 
+            } 
+        } 
+        return matchSearch && matchDate; 
+      });
+
+      if(filteredSales.length === 0) return Swal.fire('Kosong!', 'Tidak ada data untuk dicetak.', 'warning');
+
+      google.script.run.withSuccessHandler(details => {
+          let totalKotor = 0; let totalDiskon = 0; let totalBersih = 0; let totalPcs = 0;
+          let methodTotals = {};
+          let tbodyHtml = ''; let no = 1;
+          
+          filteredSales.forEach(sale => {
+              const trxId = sale[0];
+              const date = new Date(sale[1]).toLocaleString('id-ID');
+              const method = sale[2];
+              const note = sale[3] ? sale[3] : '-';
+              const disc = Number(String(sale[4]).replace(/[^0-9]/g, '')) || 0;
+              const grand = Number(String(sale[5]).replace(/[^0-9]/g, '')) || 0;
+              const kotor = grand + disc;
+              
+              totalKotor += kotor; totalDiskon += disc; totalBersih += grand;
+              if(!methodTotals[method]) methodTotals[method] = 0;
+              methodTotals[method] += grand;
+
+              const trxDetails = details.filter(det => det[0] === trxId);
+              
+              if(trxDetails.length > 0) {
+                 tbodyHtml += `<tr class="trx-header">
+                    <td>${no}</td>
+                    <td><strong>${trxId}</strong><br><small style="font-weight:normal;">${date}</small></td>
+                    <td>${method}<br><small style="font-weight:normal;">Note: ${note}</small></td>
+                    <td>Rp ${disc.toLocaleString('id-ID')}</td>
+                    <td><strong>Rp ${grand.toLocaleString('id-ID')}</strong></td>
+                 </tr>`;
+                 
+                 tbodyHtml += `<tr><td colspan="5" class="p-0">
+                    <table class="detail-table">
+                        <tr><th>Artikel</th><th>Size</th><th>Qty</th><th>Subtotal</th></tr>`;
+                 
+                 trxDetails.forEach(det => {
+                     const qty = Number(det[4]) || 0;
+                     const sub = Number(String(det[6]).replace(/[^0-9]/g, '')) || 0;
+                     totalPcs += qty;
+                     tbodyHtml += `<tr>
+                        <td>${det[2]}</td>
+                        <td>${det[3]}</td>
+                        <td>${qty}</td>
+                        <td>Rp ${sub.toLocaleString('id-ID')}</td>
+                     </tr>`;
+                 });
+                 tbodyHtml += `</table></td></tr>`;
+                 no++;
+              }
+          });
+
+          let methodHtml = '';
+          for(let m in methodTotals) {
+              methodHtml += `<tr><td>${m}</td><td style="text-align:right; font-weight:bold;">Rp ${methodTotals[m].toLocaleString('id-ID')}</td></tr>`;
+          }
+
+          const printWindow = window.open('', '_blank', 'width=1000,height=800'); 
+          if (!printWindow) {
+              Swal.fire('Pop-up Terblokir!', 'Browser memblokir jendela Print. Harap izinkan pop-up (Always allow pop-ups).', 'warning');
+              return;
+          }
+          
+          printWindow.document.write(`<html><head><title>Print Detail Rekap Penjualan</title><style>
+            body{padding:20px;font-family:sans-serif;color:black;background:white;font-size:12px;}
+            h3{text-align:center;margin-bottom:5px;font-weight:bold;}
+            .summary-box{display:flex;justify-content:space-between;border:1px solid #000;padding:15px;margin-bottom:20px;background:#f9f9f9;}
+            .summary-col{flex:1;}
+            table{width:100%;border-collapse:collapse;margin-bottom:10px;}
+            th,td{border:1px solid #000;padding:6px;text-align:left;vertical-align:top;}
+            th{background-color:#e0e0e0;}
+            .trx-header{background-color:#f2f2f2;}
+            .detail-table{width:90%;float:right;margin:4px 0 10px 0;border:1px dashed #999;background:#fff;}
+            .detail-table th, .detail-table td{border:1px dashed #ccc;padding:4px;}
+            .detail-table th{background-color:#fafafa;}
+          </style></head><body>
+            <h3>LAPORAN RINCIAN PENJUALAN</h3>
+            <p style="text-align:center;">Periode: ${startDate} s/d ${endDate}</p>
+            
+            <div class="summary-box">
+               <div class="summary-col">
+                  <strong style="font-size:14px;">RINGKASAN TOTAL</strong><br><br>
+                  Total Artikel Terjual: <strong style="font-size:14px;">${totalPcs} Pcs</strong><br>
+                  Penjualan Kotor: Rp ${totalKotor.toLocaleString('id-ID')}<br>
+                  Diskon Diberikan: Rp ${totalDiskon.toLocaleString('id-ID')}<br>
+                  <strong style="font-size:14px; color:#c00;">Penjualan Bersih: Rp ${totalBersih.toLocaleString('id-ID')}</strong>
+               </div>
+               <div class="summary-col">
+                  <strong style="font-size:14px;">METODE PEMBAYARAN</strong><br><br>
+                  <table style="width:80%; border:none; margin:0; background:transparent;">
+                     ${methodHtml}
+                  </table>
+               </div>
+            </div>
+
+            <table>
+              <thead>
+                 <tr><th>No</th><th>Trx ID & Tanggal</th><th>Pembayaran & Note</th><th>Diskon</th><th>Total Bayar</th></tr>
+              </thead>
+              <tbody>
+                 ${tbodyHtml}
+              </tbody>
+            </table>
+            
+            <script>setTimeout(()=>{window.print();window.close();},1500);<\/script>
+          </body></html>`); 
+          printWindow.document.close(); 
+          Swal.close();
+      }).getTrxDetails('');
+  }
+
+  function printInventoryData() { 
+    const printWindow = window.open('', '_blank', 'width=900,height=700'); 
+    if (!printWindow) {
+      Swal.fire('Pop-up Terblokir!', 'Harap aktifkan izin pop-up pada browser Anda.', 'warning');
+      return;
+    }
+    const tempDiv = document.createElement('div'); 
+    tempDiv.innerHTML = document.querySelector('#inventoryPage .table-responsive').innerHTML; 
+    tempDiv.querySelectorAll('th:last-child, td:last-child').forEach(el => el.remove()); 
+    const tableHtml = tempDiv.innerHTML; 
+    const totalBadge = document.getElementById('invTotalBadge').innerText; 
+    printWindow.document.write(`<html><head><title>Print Inventory</title><style>body{padding:30px;font-family:sans-serif;color:black;background:white;}h3{text-align:center;margin-bottom:5px;font-weight:bold;}.summary{text-align:center;margin-bottom:20px;font-size:1.1rem;padding-bottom:10px;border-bottom:2px dashed #ccc;}table{width:100%;border-collapse:collapse;margin-top:20px;}th,td{border:1px solid #000;padding:8px;text-align:left;}th{background-color:#f2f2f2;}a,span{text-decoration:none !important;color:black !important;}</style></head><body><h3>INVENTORY DATABASE</h3><div class="summary">${totalBadge}</div>${tableHtml}<script>setTimeout(()=>{window.print();window.close();},500);<\/script></body></html>`); 
+    printWindow.document.close(); 
+  }
+
+  // --- ENGINE FREE STUFF ---
+  function loadFreeStuffInventory() { const list = document.getElementById('freeInventoryList'); if (!list) return; list.innerHTML = ''; inventoryData.forEach(item => { const isOutOfStock = item.Stock <= 0; const stockBadge = isOutOfStock ? `<span class="badge bg-danger rounded-pill">Habis</span>` : `<span class="badge bg-success rounded-pill">Stok: ${item.Stock}</span>`; list.innerHTML += `<button type="button" class="list-group-item list-group-item-action bg-dark text-light border-secondary d-flex justify-content-between align-items-center" ${isOutOfStock ? 'disabled' : ''} ondblclick="searchFreeItem('${item.Barcode}')"><div class="text-start"><div class="fw-bold" style="font-size: 0.9rem;">${item['Article Name']}</div><small class="text-warning" style="font-size: 0.8rem;">${item['Article Code']} | Size: ${item.Size}</small></div>${stockBadge}</button>`; }); }
+  function filterFreePosList() { const q = document.getElementById('freeFilterList').value.toLowerCase(); const filtered = inventoryData.filter(i => String(i.Barcode || '').toLowerCase().includes(q) || String(i['Article Code'] || '').toLowerCase().includes(q) || String(i['Article Name'] || '').toLowerCase().includes(q)); const list = document.getElementById('freeInventoryList'); list.innerHTML = ''; filtered.forEach(item => { const isOutOfStock = item.Stock <= 0; const stockBadge = isOutOfStock ? `<span class="badge bg-danger rounded-pill">Habis</span>` : `<span class="badge bg-success rounded-pill">Stok: ${item.Stock}</span>`; list.innerHTML += `<button type="button" class="list-group-item list-group-item-action bg-dark text-light border-secondary d-flex justify-content-between align-items-center" ${isOutOfStock ? 'disabled' : ''} ondblclick="searchFreeItem('${item.Barcode}')"><div class="text-start"><div class="fw-bold" style="font-size: 0.9rem;">${item['Article Name']}</div><small class="text-warning" style="font-size: 0.8rem;">${item['Article Code']} | Size: ${item.Size}</small></div>${stockBadge}</button>`; }); }
+  function searchFreeItem(query) { if(!query) return; const q = String(query).toLowerCase(); let item = inventoryData.find(i => String(i.Barcode || '').toLowerCase() === q); if(!item) item = inventoryData.find(i => String(i['Article Code'] || '').toLowerCase() === q || String(i['Article Name'] || '').toLowerCase().includes(q)); if(item) { if(item.Stock <= 0) { Swal.fire('Stok Habis!', 'Item ini sudah tidak tersedia.', 'error'); return; } let freeItem = freeCart.find(c => c.barcode === item.Barcode); if(freeItem) { freeItem.qty++; freeItem.subtotal = freeItem.qty * freeItem.price; } else { freeCart.push({ barcode: item.Barcode, articleName: item['Article Name'], size: item.Size, price: Number(item.Price), qty: 1, subtotal: Number(item.Price) }); } renderFreeCart(); } else Swal.fire('Oops!', 'Item tidak ditemukan di inventory.', 'warning'); }
+  function renderFreeCart() { const tbody = document.getElementById('freeCartTableBody'); tbody.innerHTML = ''; freeCart.forEach((c, index) => { tbody.innerHTML += `<tr><td class="text-info">${c.articleName}</td><td>${c.size}</td><td>Rp ${c.price.toLocaleString('id-ID')}</td><td><input type="number" class="form-control form-control-sm w-50 bg-dark text-success border-success" value="${c.qty}" onchange="updateFreeQty(${index}, this.value)"></td><td class="text-warning">Rp ${c.subtotal.toLocaleString('id-ID')}</td><td><button class="btn btn-sm btn-outline-danger" onclick="removeFreeCart(${index})">X</button></td></tr>`; }); calculateFreeTotal(); }
+  function updateFreeQty(index, val) { if(val <= 0) removeFreeCart(index); else { freeCart[index].qty = Number(val); freeCart[index].subtotal = freeCart[index].qty * freeCart[index].price; renderFreeCart(); } }
+  function removeFreeCart(index) { freeCart.splice(index, 1); renderFreeCart(); }
+  function clearFreeCart() { freeCart = []; document.getElementById('freeNote').value = ''; renderFreeCart(); }
+  function calculateFreeTotal() { let totalQty = freeCart.reduce((sum, item) => sum + item.qty, 0); let totalNominal = freeCart.reduce((sum, item) => sum + item.subtotal, 0); document.getElementById('freeTotalQty').innerText = totalQty + ' Pcs'; document.getElementById('freeTotalNominal').innerText = 'Rp ' + totalNominal.toLocaleString('id-ID'); }
+  function checkoutFreeStuff() { if(freeCart.length === 0) return Swal.fire('Kosong!', 'Keranjang Free Stuff masih kosong!', 'warning'); const note = document.getElementById('freeNote').value.trim(); const category = document.getElementById('freeCategory').value; if(!note) return Swal.fire('Oops!', 'Catatan Alasan (Note) WAJIB diisi sebelum memproses!', 'warning'); const payload = { cart: freeCart, category: category, note: note }; google.script.run.withFailureHandler(err => Swal.fire('Gagal', err.message, 'error')).withSuccessHandler(res => { Swal.fire('Sukses!', res.message, 'success'); clearFreeCart(); google.script.run.withSuccessHandler(data => { inventoryData = data; loadFreeStuffInventory(); loadInventoryTable(); }).getInventory(); }).processFreeStuffBatch(payload); }
+
+  // --- ENGINE REKAP FREE STUFF ---
+  function loadFreeStuffLogTable() { const tbody = document.getElementById('recapFreeTableBody'); tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Memuat data histori...</td></tr>'; google.script.run.withFailureHandler(err => { tbody.innerHTML = `<tr><td colspan="7" class="text-danger text-center">Gagal memuat: ${err.message}</td></tr>`; }).withSuccessHandler(logs => { freeLogData = logs; filterFreeLog(); }).getFreeStuffLog(); }
+  function filterFreeLog() { const startDate = document.getElementById('rfStartDate').value; const endDate = document.getElementById('rfEndDate').value; const tbody = document.getElementById('recapFreeTableBody'); tbody.innerHTML = ''; const filtered = freeLogData.filter(row => { let matchDate = true; if (startDate && endDate && row[0]) { const dDate = new Date(row[0]); if(!isNaN(dDate)) { const sDate = new Date(startDate); sDate.setHours(0,0,0,0); const eDate = new Date(endDate); eDate.setHours(23,59,59,999); matchDate = dDate >= sDate && dDate <= eDate; } } return matchDate; }); if(filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Belum ada data di rentang waktu ini.</td></tr>'; document.getElementById('rfTotalQtyBadge').innerText = '0 Pcs'; document.getElementById('rfTotalNominalBadge').innerText = 'Rp 0'; return; } let totalQty = 0; let totalNominal = 0; filtered.reverse().forEach(row => { totalQty += Number(row[4]) || 0; let nominal = row[5]; let cleanNom = Number(String(nominal).replace(/[^0-9]/g, '')) || 0; totalNominal += cleanNom; if(!String(nominal).includes('Rp')) nominal = 'Rp ' + cleanNom.toLocaleString('id-ID'); let displayDate = "-"; let dateObj = new Date(row[0]); if(!isNaN(dateObj)) displayDate = dateObj.toLocaleString('id-ID'); tbody.innerHTML += `<tr><td><small class="text-muted">${displayDate}</small></td><td><strong>${row[2]}</strong><br><small class="text-warning">${row[1]}</small></td><td>${row[3]}</td><td class="text-success fw-bold">${row[4]}</td><td class="text-warning">${nominal}</td><td><span class="badge bg-info text-dark">${row[6]}</span></td><td><small>${row[7]}</small></td></tr>`; }); document.getElementById('rfTotalQtyBadge').innerText = totalQty + ' Pcs'; document.getElementById('rfTotalNominalBadge').innerText = 'Rp ' + totalNominal.toLocaleString('id-ID'); }
+
+  // --- ENGINE REKAP PENJUALAN ---
+  function loadRecap() { const tbody = document.getElementById('recapTableBody'); tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Memuat data rekap...</td></tr>'; google.script.run.withFailureHandler(err => { tbody.innerHTML = `<tr><td colspan="6" class="text-danger text-center">Gagal memuat: ${err.message}</td></tr>`; }).withSuccessHandler(res => { recapData = res.salesData; filterRecap(); }).getSalesRecap(); }
+  
+  function filterRecap() { 
+    const q = document.getElementById('recapSearch').value.toLowerCase().trim(); 
+    const startDate = document.getElementById('recapStartDate').value; 
+    const endDate = document.getElementById('recapEndDate').value;
+    const filtered = recapData.filter(d => { 
+        const matchSearch = String(d[0]).toLowerCase().includes(q); 
+        let matchDate = true; 
+        if (startDate && endDate && d[1]) { 
+            const dDate = new Date(d[1]); 
+            if(!isNaN(dDate)) { 
+                const sDate = new Date(startDate); sDate.setHours(0,0,0,0); 
+                const eDate = new Date(endDate); eDate.setHours(23,59,59,999); 
+                matchDate = dDate >= sDate && dDate <= eDate; 
+            } 
+        } 
+        return matchSearch && matchDate; 
+    });
+    const tbody = document.getElementById('recapTableBody'); 
+    tbody.innerHTML = ''; 
+    if(filtered.length === 0) { 
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Tidak ada transaksi.</td></tr>'; 
+        document.getElementById('recapQtyBadge').innerText = '0 Pcs'; document.getElementById('recapTrxBadge').innerText = '0 Trx'; document.getElementById('recapTotalBadge').innerText = 'Total: Rp 0'; 
+        return; 
+    } 
+    let totalRevenue = 0; let totalTrx = filtered.length; let totalFilteredQty = 0; 
+    filtered.forEach((d, index) => { 
+        let totalDisplay = d[5]; let cleanVal = Number(String(totalDisplay).replace(/[^0-9]/g, '')); 
+        totalRevenue += cleanVal; totalFilteredQty += Number(d[6]) || 0; 
+        if(!String(totalDisplay).includes('Rp')) totalDisplay = 'Rp ' + cleanVal.toLocaleString('id-ID'); 
+        let displayDate = "-"; let dateObj = new Date(d[1]); 
+        if(!isNaN(dateObj)) displayDate = dateObj.toLocaleDateString('id-ID'); 
+        
+        let noteText = d[3] ? d[3] : '-'; 
+        let safeNote = String(noteText).replace(/'/g, "\\'").replace(/"/g, "&quot;");
+        
+        tbody.innerHTML += `<tr><td>${index + 1}</td><td><span class="text-warning fw-bold text-decoration-underline" style="cursor:pointer;" onclick="showTrxDetail('${d[0]}', '${d[2]}', '${d[4]}', '${d[5]}', '${safeNote}')">${d[0]}</span></td><td>${displayDate}</td><td>${d[2]}</td><td>${noteText}</td><td>${totalDisplay}</td></tr>`; 
+    });
+    document.getElementById('recapTrxBadge').innerText = totalTrx + ' Trx'; 
+    document.getElementById('recapTotalBadge').innerText = 'Total: Rp ' + totalRevenue.toLocaleString('id-ID'); 
+    document.getElementById('recapQtyBadge').innerText = totalFilteredQty + ' Pcs';
+  }
+
+  window.showTrxDetail = function(trxId, method, discount, grandTotal, note) { 
+    try { 
+        const modalEl = document.getElementById('detailModal'); 
+        let modal = bootstrap.Modal.getOrCreateInstance(modalEl); 
+        modal.show();
+        document.getElementById('detailContent').style.display = 'none'; 
+        document.getElementById('detailLoading').style.display = 'block'; 
+        document.getElementById('dtTrxId').innerText = trxId; 
+        document.getElementById('dtMethod').innerText = method;
+        
+        if (note && note !== '-' && note !== 'undefined') {
+            document.getElementById('dtNoteWrapper').style.display = 'block';
+            document.getElementById('dtNote').innerText = note;
+        } else {
+            document.getElementById('dtNoteWrapper').style.display = 'none';
+        }
+
+        const cleanNum = (str) => Number(String(str || '0').replace(/[^0-9]/g, '')); 
+        google.script.run.withSuccessHandler(details => { 
+            document.getElementById('detailLoading').style.display = 'none'; 
+            document.getElementById('detailContent').style.display = 'block'; 
+            const tbody = document.getElementById('dtTableBody'); 
+            tbody.innerHTML = ''; let subtotalBeforeDisc = 0; 
+            details.forEach(item => { 
+                let price = cleanNum(item[5]), qty = cleanNum(item[4]), subtotal = cleanNum(item[6]); 
+                subtotalBeforeDisc += subtotal; 
+                tbody.innerHTML += `<tr><td><small class="text-muted">${item[1]}</small></td><td>${item[2]}</td><td>${item[3]}</td><td>${qty}</td><td>Rp ${price.toLocaleString('id-ID')}</td><td>Rp ${subtotal.toLocaleString('id-ID')}</td></tr>`; 
+            }); 
+            document.getElementById('dtSubtotal').innerText = 'Rp ' + subtotalBeforeDisc.toLocaleString('id-ID'); 
+            document.getElementById('dtDiscount').innerText = 'Rp ' + cleanNum(discount).toLocaleString('id-ID'); 
+            document.getElementById('dtGrandTotal').innerText = 'Rp ' + cleanNum(grandTotal).toLocaleString('id-ID'); 
+        }).getTrxDetails(trxId);
+    } catch (e) { Swal.fire('Error', e.message, 'error'); } 
+  };
+
+  function printRecapData() { 
+      const printWindow = window.open('', '_blank', 'width=900,height=700'); 
+      if (!printWindow) {
+          Swal.fire('Pop-up Terblokir!', 'Browser memblokir jendela Print. Harap izinkan pop-up (Always allow pop-ups) pada browser Anda.', 'warning');
+          return;
+      }
+      const tableHtml = document.querySelector('#recapPage .table-responsive').innerHTML;
+      const totalBadge = document.getElementById('recapTotalBadge').innerText; 
+      const qtyBadge = document.getElementById('recapQtyBadge').innerText; 
+      const trxBadge = document.getElementById('recapTrxBadge').innerText;
+      printWindow.document.write(`<html><head><title>Print Rekap Penjualan</title><style>body{padding:30px;font-family:sans-serif;color:black;background:white;}h3{text-align:center;margin-bottom:5px;font-weight:bold;}.summary{text-align:center;margin-bottom:20px;font-size:1.1rem;padding-bottom:10px;border-bottom:2px dashed #ccc;}table{width:100%;border-collapse:collapse;margin-top:20px;}th,td{border:1px solid #000;padding:8px;text-align:left;}th{background-color:#f2f2f2;}a,span{text-decoration:none !important;color:black !important;}</style></head><body><h3>REKAP PENJUALAN HARIAN</h3><div class="summary">${totalBadge} | ${qtyBadge} | ${trxBadge}</div>${tableHtml}<script>setTimeout(()=>{window.print();window.close();},500);<\/script></body></html>`); 
+      printWindow.document.close(); 
+  }
+
+  // --- ENGINE CLOSING HARIAN ---
+  function loadClosingData() { const cDateStr = document.getElementById('closingDateInput').value; if(!cDateStr) return; google.script.run.withFailureHandler(err => Swal.fire("Gagal", err.message, "error")).withSuccessHandler(res => { const allSales = res.salesData; let gross = 0; let disc = 0; let net = 0; let mCash = 0; let mCard = 0; let mQris = 0; let mTransfer = 0; let totalQty = 0; const sDate = new Date(cDateStr); sDate.setHours(0,0,0,0); const eDate = new Date(cDateStr); eDate.setHours(23,59,59,999); google.script.run.withFailureHandler(err => Swal.fire("Gagal", err.message, "error")).withSuccessHandler(details => { allSales.forEach(sale => { const dDate = new Date(sale[1]); if(!isNaN(dDate) && dDate >= sDate && dDate <= eDate) { const trxId = sale[0]; const method = String(sale[2]).toUpperCase(); const discount = Number(String(sale[4]).replace(/[^0-9]/g, '')) || 0; const grand = Number(String(sale[5]).replace(/[^0-9]/g, '')) || 0; const subtotal = grand + discount; gross += subtotal; disc += discount; net += grand; if(method === 'CASH') mCash += grand; else if(method === 'CARD') mCard += grand; else if(method === 'QRIS') mQris += grand; else if(method === 'TRANSFER') mTransfer += grand; details.forEach(det => { if(det[0] === trxId) { totalQty += Number(det[4]) || 0; } }); } }); document.getElementById('closeGross').innerText = 'Rp ' + gross.toLocaleString('id-ID'); document.getElementById('closeDisc').innerText = 'Rp ' + disc.toLocaleString('id-ID'); document.getElementById('closeNet').innerText = 'Rp ' + net.toLocaleString('id-ID'); document.getElementById('closeQty').innerText = totalQty + ' Pcs'; document.getElementById('closeCash').innerText = 'Rp ' + mCash.toLocaleString('id-ID'); document.getElementById('closeCard').innerText = 'Rp ' + mCard.toLocaleString('id-ID'); document.getElementById('closeQris').innerText = 'Rp ' + mQris.toLocaleString('id-ID'); document.getElementById('closeTransfer').innerText = 'Rp ' + mTransfer.toLocaleString('id-ID'); window.closingPrintData = { date: cDateStr, qty: totalQty, gross: gross, disc: disc, net: net, cash: mCash, card: mCard, qris: mQris, transfer: mTransfer }; }).getTrxDetails(''); }).getSalesRecap(); }
+  function printClosingReport() { if(!window.closingPrintData) return Swal.fire('Perhatian', 'Silakan muat data closing terlebih dahulu!', 'warning'); const d = window.closingPrintData; document.getElementById('pcDateTitle').innerText = "Tanggal: " + new Date(d.date).toLocaleDateString('id-ID'); document.getElementById('pcPrintDate').innerText = new Date().toLocaleString('id-ID'); document.getElementById('pcQty').innerText = d.qty + " Pcs"; document.getElementById('pcGross').innerText = "Rp " + d.gross.toLocaleString('id-ID'); document.getElementById('pcDisc').innerText = "Rp " + d.disc.toLocaleString('id-ID'); document.getElementById('pcNet').innerText = "Rp " + d.net.toLocaleString('id-ID'); document.getElementById('pcCash').innerText = "Rp " + d.cash.toLocaleString('id-ID'); document.getElementById('pcCard').innerText = "Rp " + d.card.toLocaleString('id-ID'); document.getElementById('pcQris').innerText = "Rp " + d.qris.toLocaleString('id-ID'); document.getElementById('pcTransfer').innerText = "Rp " + d.transfer.toLocaleString('id-ID'); document.body.classList.add('printing-closing'); window.print(); setTimeout(() => document.body.classList.remove('printing-closing'), 1000); }
+
+  // --- FITUR RESTOCK CEPAT ---
+  function openRestockModal(barcode) { const modal = new bootstrap.Modal(document.getElementById('restockModal')); modal.show(); document.getElementById('rsBarcode').value = barcode; findRestockItem(barcode); }
+  function findRestockItem(barcode) { const item = inventoryData.find(i => String(i.Barcode || '').toLowerCase() === String(barcode).trim().toLowerCase()); if(item) { document.getElementById('rsName').value = item['Article Name'] + ' (Sz: ' + item.Size + ')'; document.getElementById('btnSubmitRestock').disabled = false; document.getElementById('rsQty').focus(); } else { document.getElementById('rsName').value = 'TIDAK DITEMUKAN!'; document.getElementById('btnSubmitRestock').disabled = true; } }
+  function submitRestock() { const barcode = document.getElementById('rsBarcode').value.trim(); const qty = Number(document.getElementById('rsQty').value); const btn = document.getElementById('btnSubmitRestock'); if(qty <= 0) return Swal.fire('Oops!', 'Kuantitas harus lebih dari 0!', 'warning'); btn.innerHTML = 'Loading...'; btn.disabled = true; google.script.run.withFailureHandler(err => { Swal.fire('Gagal', err.message, 'error'); btn.innerHTML = 'Simpan Restock'; btn.disabled = false; }).withSuccessHandler(res => { Swal.fire('Berhasil!', 'Stok ' + res.name + ' telah diperbarui. Total: ' + res.newStock, 'success'); document.getElementById('rsBarcode').value = ''; document.getElementById('rsName').value = ''; document.getElementById('rsQty').value = ''; btn.innerHTML = 'Simpan Restock'; google.script.run.withSuccessHandler(data => { inventoryData = data; loadInventoryTable(); loadFreeStuffInventory(); }).getInventory(); const modalEl = document.getElementById('restockModal'); const modalInstance = bootstrap.Modal.getInstance(modalEl); if(modalInstance) modalInstance.hide(); }).processQuickRestock(barcode, qty); }
+
+  // --- ENGINE NAVIGASI DLL ---
+  function showPage(pageId) { if(pageId === 'closingPage') return; document.querySelectorAll('.page-section').forEach(el => el.classList.remove('active')); document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active')); document.getElementById(pageId).classList.add('active'); if(event && event.target) event.target.classList.add('active'); if(pageId === 'posPage') setTimeout(() => document.getElementById('posSearch').focus(), 100); if(pageId === 'freeStuffPage') setTimeout(() => document.getElementById('freeSearch').focus(), 100); if(pageId === 'inputPage') loadArticleDropdown(); }
+  function loadSettingsForm() { document.getElementById('setShopName').value = currentSettings.shopName; document.getElementById('setEventName').value = currentSettings.eventName; document.getElementById('setFooter').value = currentSettings.footer; }
+  function submitSettings() { 
+  const payload = { 
+    shopName: document.getElementById('setShopName').value.trim(), 
+    eventName: document.getElementById('setEventName').value.trim(), 
+    footer: document.getElementById('setFooter').value.trim(),
+    keyCash: currentSettings.keyCash,
+    keyQris: currentSettings.keyQris,
+    keyCard: currentSettings.keyCard,
+    keyTransfer: currentSettings.keyTransfer
+  }; 
+  if(!payload.shopName) return Swal.fire('Oops!', 'Nama toko kosong!', 'warning'); 
+  google.script.run.withSuccessHandler(res => { Swal.fire('Sukses!', res, 'success'); currentSettings = payload; applyReceiptSettings(); showPage('posPage'); }).saveSettings(payload); 
+}
+  
+  function loadArticleDropdown() { const select = document.getElementById('iSelectArticle'); select.innerHTML = '<option value="">-- Buat Artikel Baru (Ketik Manual) --</option>'; const unique = []; const map = new Map(); for (const item of inventoryData) { if(item['Article Code'] && !map.has(item['Article Code'])) { map.set(item['Article Code'], true); unique.push({ code: item['Article Code'], name: item['Article Name'], price: item['Price'] }); } } unique.forEach(a => { select.innerHTML += `<option value="${a.code}|${a.name}|${a.price}">${a.code} - ${a.name}</option>`; }); }
+  function fillFromDropdown() { const val = document.getElementById('iSelectArticle').value; const codeEl = document.getElementById('iArtCode'); const nameEl = document.getElementById('iArtName'); const priceEl = document.getElementById('iPrice'); if(val) { const parts = val.split('|'); codeEl.value = parts[0]; nameEl.value = parts[1]; priceEl.value = parts[2]; codeEl.readOnly = true; nameEl.readOnly = true; priceEl.readOnly = true; codeEl.classList.add('bg-secondary'); nameEl.classList.add('bg-secondary'); priceEl.classList.add('bg-secondary'); document.getElementById('iSize').focus(); } else { codeEl.value = ''; nameEl.value = ''; priceEl.value = ''; codeEl.readOnly = false; nameEl.readOnly = false; priceEl.readOnly = false; codeEl.classList.remove('bg-secondary'); nameEl.classList.remove('bg-secondary'); priceEl.classList.remove('bg-secondary'); } }
+  function renderPosList(data) { const list = document.getElementById('posInventoryList'); if (!list) return; list.innerHTML = ''; data.forEach(item => { const isOutOfStock = item.Stock <= 0; const stockBadge = isOutOfStock ? `<span class="badge bg-danger rounded-pill">Habis</span>` : `<span class="badge bg-success rounded-pill">Stok: ${item.Stock}</span>`; list.innerHTML += `<button type="button" class="list-group-item list-group-item-action bg-dark text-light border-secondary d-flex justify-content-between align-items-center" ${isOutOfStock ? 'disabled' : ''} ondblclick="searchItem('${item.Barcode}')"><div class="text-start"><div class="fw-bold" style="font-size: 0.9rem;">${item['Article Name']}</div><small class="text-warning" style="font-size: 0.8rem;">${item['Article Code']} | Size: ${item.Size}</small></div>${stockBadge}</button>`; }); }
+  function filterPosList() { const q = document.getElementById('posFilterList').value.toLowerCase(); const filtered = inventoryData.filter(i => String(i.Barcode || '').toLowerCase().includes(q) || String(i['Article Code'] || '').toLowerCase().includes(q) || String(i['Article Name'] || '').toLowerCase().includes(q)); renderPosList(filtered); }
+  function voidTransaction() { const trxId = document.getElementById('dtTrxId').innerText; Swal.fire({ title: 'VOID Transaksi?', text: `Anda yakin ingin me-VOID transaksi ${trxId}? Stok akan dikembalikan otomatis.`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6', confirmButtonText: 'Ya, VOID Transaksi!' }).then((result) => { if (result.isConfirmed) { const modal = bootstrap.Modal.getInstance(document.getElementById('detailModal')); if(modal) modal.hide(); google.script.run.withSuccessHandler(res => { Swal.fire('Terhapus!', res, 'success'); loadRecap(); google.script.run.withSuccessHandler(data => { inventoryData = data; renderPosList(inventoryData); loadFreeStuffInventory(); loadInventoryTable(); }).getInventory(); }).processVoid(trxId); } }) }
+  function submitInventory() { const btnSubmit = document.querySelector('#inputForm button[type="submit"]'); btnSubmit.innerHTML = 'Menyimpan...'; btnSubmit.disabled = true; const item = { barcode: document.getElementById('iBarcode').value, articleCode: document.getElementById('iArtCode').value, articleName: document.getElementById('iArtName').value, size: document.getElementById('iSize').value, price: document.getElementById('iPrice').value, stock: document.getElementById('iStock').value }; google.script.run.withFailureHandler(err => { Swal.fire('Error', err.message, 'error'); btnSubmit.innerHTML = 'Simpan ke Inventory'; btnSubmit.disabled = false; }).withSuccessHandler(res => { Swal.fire('Berhasil!', res.message, 'success'); document.getElementById('inputForm').reset(); btnSubmit.innerHTML = 'Simpan ke Inventory'; btnSubmit.disabled = false; google.script.run.withSuccessHandler(data => { inventoryData = data; loadInventoryTable(); loadFreeStuffInventory(); }).getInventory(); }).addInventory(item); }
+  function loadInventoryTable() { renderInv(inventoryData); }
+  function filterInventory() { const q = document.getElementById('invSearch').value.toLowerCase(); const filtered = inventoryData.filter(i => String(i.Barcode || '').toLowerCase().includes(q) || String(i['Article Code'] || '').toLowerCase().includes(q) || String(i['Article Name'] || '').toLowerCase().includes(q)); renderInv(filtered); }
+  function renderInv(data) {
+    const tbody = document.getElementById('invTableBody');
+    tbody.innerHTML = '';
+    let totalPcs = 0;
+    data.forEach(d => {
+      totalPcs += Number(d.Stock) || 0;
+      
+      // Mengambil nilai Harga Promo dari urutan database kolom ke-7 (index ke-6)
+      let rawPromo = d[6] || d['Harga Promo'];
+      let promoDisplay = (rawPromo && Number(rawPromo) > 0) ? 'Rp ' + Number(rawPromo).toLocaleString('id-ID') : '<span class="text-muted">-</span>';
+      
+      tbody.innerHTML += `<tr>
+        <td>${d.Barcode}</td>
+        <td>${d['Article Code']}</td>
+        <td>${d['Article Name']}</td>
+        <td>${d.Size}</td>
+        <td>Rp ${Number(d.Price).toLocaleString('id-ID')}</td>
+        <td class="text-info fw-bold">${promoDisplay}</td>
+        <td>${d.Stock}</td>
+        <td>
+          <button class="btn btn-sm btn-outline-warning py-0 px-2" onclick="openRestockModal('${d.Barcode}')" style="font-size: 11px;" title="Tambah Stok"><i class="bi bi-box-arrow-in-down"></i> +Stok</button>
+          <button class="btn btn-sm btn-outline-info py-0 px-2 ms-1" onclick="openPromoModal('${d.Barcode}', '${d['Article Name']}', '${rawPromo || ''}')" style="font-size: 11px;" title="Set Promo"><i class="bi bi-tag"></i> Promo</button>
+        </td>
+      </tr>`;
+    });
+    document.getElementById('invTotalBadge').innerText = 'Total: ' + totalPcs + ' Pcs';
+  }
+  function downloadTemplate() { 
+    const ws_data = [['Barcode', 'Article Code', 'Article Name', 'Size', 'Price', 'Stock', 'Harga Promo']]; 
+    const ws = XLSX.utils.aoa_to_sheet(ws_data); 
+    const wb = XLSX.utils.book_new(); 
+    XLSX.utils.book_append_sheet(wb, ws, "Inventory_Template"); 
+    XLSX.writeFile(wb, "Template_Inventory_Screamous.xlsx"); 
+  }
+  function processExcel() { const fileInput = document.getElementById('excelFile'); if (!fileInput.files.length) return Swal.fire('Oops!', 'Pilih file Excel!', 'warning'); const reader = new FileReader(); reader.onload = function(e) { const workbook = XLSX.read(new Uint8Array(e.target.result), {type: 'array'}); const excelRows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]); if (excelRows.length === 0) return Swal.fire('Kosong!', 'File Excel kosong!', 'error'); if(!("Barcode" in excelRows[0])) return Swal.fire('Format Salah!', 'Template tidak valid.', 'error'); const btn = document.getElementById('btnUploadExcel'); btn.innerHTML = 'Loading...'; btn.disabled = true; google.script.run.withSuccessHandler(res => { Swal.fire('Berhasil!', res, 'success'); btn.innerHTML = '2. Upload & Import'; btn.disabled = false; fileInput.value = ''; google.script.run.withSuccessHandler(data => { inventoryData = data; loadInventoryTable(); loadFreeStuffInventory(); }).getInventory(); }).importBulkInventory(excelRows); };reader.readAsArrayBuffer(fileInput.files[0]); }
+
+  // --- FUNGSI RE-PRINT STRUK KASIR (NOTE TIDAK DICETAK KE STRUK KONSUMEN) ---
+  window.reprintReceipt = function() {
+    const trxId = document.getElementById('dtTrxId').innerText;
+    if (!trxId) return;
+
+    const method = document.getElementById('dtMethod').innerText;
+    const subtotal = document.getElementById('dtSubtotal').innerText;
+    const discount = document.getElementById('dtDiscount').innerText;
+    const grandTotal = document.getElementById('dtGrandTotal').innerText;
+
+    const rows = document.querySelectorAll('#dtTableBody tr');
+    let printCartHtml = '';
+    rows.forEach(row => {
+      const cells = row.querySelectorAll('td');
+      if(cells.length >= 6) {
+        printCartHtml += `<tr><td>${cells[1].innerText} (${cells[2].innerText})<br>@${cells[4].innerText} x ${cells[3].innerText}</td><td style="text-align:right;">${cells[5].innerText}</td></tr>`;
+      }
+    });
+
+    document.getElementById('printDate').innerText = new Date().toLocaleString('id-ID') + " (COPY)";
+    document.getElementById('printCart').innerHTML = printCartHtml;
+    document.getElementById('printSub').innerText = subtotal;
+    document.getElementById('printDisc').innerText = discount;
+    document.getElementById('printTotal').innerText = grandTotal;
+    
+    // Note ditiadakan dari cetak struk agar privasi catatan rahasia kasir aman
+    // Note ditiadakan dari cetak struk agar privasi catatan rahasia kasir aman
+    document.getElementById('printMethod').innerHTML = method;
+
+    try { JsBarcode("#printBarcode", trxId, {width: 1.5, height: 40, displayValue: true, fontSize: 12, margin: 0}); } catch(e) {}
+
+    document.body.classList.add('printing-receipt'); 
+    window.print(); 
+    setTimeout(() => document.body.classList.remove('printing-receipt'), 1000);
+  };
+  // --- KONTROLLER MODAL & SAKLAR PREFILLED DISCOUNT ---
+   window.openPromoModal = function(barcode, name, currentPromo) {
+     const modal = new bootstrap.Modal(document.getElementById('promoModal'));
+     modal.show();
+     document.getElementById('pmBarcode').value = barcode;
+     document.getElementById('pmName').value = name;
+     document.getElementById('pmPromoPrice').value = currentPromo ? Number(currentPromo) : '';
+   };
+
+   window.submitPromoPrice = function() {
+     try {
+       const barcode = document.getElementById('pmBarcode').value;
+       const promoPrice = document.getElementById('pmPromoPrice').value;
+       const btn = document.getElementById('btnSubmitPromo'); 
+       
+       // Ubah tampilan tombol biar kelihatan sedang proses
+       if (btn) {
+           btn.innerHTML = 'Menyimpan...';
+           btn.disabled = true;
+       }
+       
+       google.script.run
+         .withFailureHandler(err => {
+           Swal.fire('Gagal di Server', err.message, 'error');
+           if (btn) { btn.innerHTML = 'Simpan Harga Promo'; btn.disabled = false; }
+         })
+         .withSuccessHandler(res => {
+           Swal.fire('Berhasil!', res, 'success');
+           if (btn) { btn.innerHTML = 'Simpan Harga Promo'; btn.disabled = false; }
+           
+           // Refresh inventory global agar harga promo ter-update
+           google.script.run.withSuccessHandler(data => {
+             inventoryData = data;
+             if (typeof renderInv === 'function') renderInv(inventoryData);
+           }).getInventory();
+           
+           // Tutup modal
+           const modalEl = document.getElementById('promoModal');
+           const modalInstance = bootstrap.Modal.getInstance(modalEl);
+           if(modalInstance) modalInstance.hide();
+           
+         }).updatePromoPrice(barcode, promoPrice);
+         
+     } catch(e) {
+       // Kalau ada kode yang salah ketik, error-nya akan muncul di layar!
+       Swal.fire('Error Lokal', 'Ada masalah: ' + e.message, 'error');
+     }
+   };
+
+   window.handlePromoToggle = function(isActive) {
+     google.script.run.withSuccessHandler(res => {
+       Swal.fire('Status Diperbarui', `Fitur Harga Promo Event berhasil di-${res ? 'AKTIFKAN (ON)' : 'NONAKTIFKAN (OFF)'}`, 'success');
+     }).togglePromoMode(isActive);
+   };
