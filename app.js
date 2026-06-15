@@ -1002,3 +1002,14 @@ const google = {
        Swal.fire('Status Diperbarui', `Fitur Harga Promo Event berhasil di-${res ? 'AKTIFKAN (ON)' : 'NONAKTIFKAN (OFF)'}`, 'success');
      }).togglePromoMode(isActive);
    };
+
+// =========================================================================
+// MENDAFTARKAN SERVICE WORKER (SATPAM OFFLINE PWA)
+// =========================================================================
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js')
+      .then(reg => console.log('Satpam PWA Aktif! Ruang lingkup:', reg.scope))
+      .catch(err => console.error('PWA Gagal didaftarkan:', err));
+  });
+}
