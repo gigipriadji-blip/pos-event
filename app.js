@@ -430,12 +430,13 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
   }
 
   function saveToLocalStorage(payload) {
-    let offlineData = JSON.parse(localStorage.getItem('screamous_offline_trx')) || [];
-    offlineData.push(payload);
-    localStorage.setItem('screamous_offline_trx', JSON.stringify(offlineData));
-    clearCart();
-    Swal.fire('Mode Darurat Offline', 'Data diamankan di memori laptop. Tekan tombol Sync di atas jika internet kembali normal.', 'warning');
-  }
+  let offlineData = JSON.parse(localStorage.getItem('screamous_offline_trx')) || [];
+  offlineData.push(payload);
+  localStorage.setItem('screamous_offline_trx', JSON.stringify(offlineData));
+  clearCart();
+  Swal.fire('Mode Darurat Offline', 'Data diamankan di memori laptop. Tekan tombol Sync di atas jika internet kembali normal.', 'warning');
+  if (typeof checkOfflineBadge === 'function') checkOfflineBadge(); // <-- Alarm ditambahkan di sini
+}
 
   function checkOfflineBadge() {
     let offlineData = JSON.parse(localStorage.getItem('screamous_offline_trx')) || [];
@@ -1008,7 +1009,14 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
        Swal.fire('Status Diperbarui', `Fitur Harga Promo Event berhasil di-${res ? 'AKTIFKAN (ON)' : 'NONAKTIFKAN (OFF)'}`, 'success');
      }).togglePromoMode(isActive);
    };
+};
 
+// SENSOR OTOMATIS MATI/NYALA INTERNET
+window.addEventListener('online', () => { if (typeof checkOfflineBadge === 'function') checkOfflineBadge(); });
+window.addEventListener('offline', () => { if (typeof checkOfflineBadge === 'function') checkOfflineBadge(); });
+
+// =========================================================================
+// MENDAFTARKAN SERVICE WORKER (SATPAM OFFLINE PWA)
 // =========================================================================
 // MENDAFTARKAN SERVICE WORKER (SATPAM OFFLINE PWA)
 // =========================================================================
