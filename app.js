@@ -1009,7 +1009,7 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
        Swal.fire('Status Diperbarui', `Fitur Harga Promo Event berhasil di-${res ? 'AKTIFKAN (ON)' : 'NONAKTIFKAN (OFF)'}`, 'success');
      }).togglePromoMode(isActive);
    };
-};
+
 
 // SENSOR OTOMATIS MATI/NYALA INTERNET
 window.addEventListener('online', () => { if (typeof checkOfflineBadge === 'function') checkOfflineBadge(); });
