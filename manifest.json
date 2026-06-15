@@ -1,0 +1,15 @@
+{
+  "name": "SCREAMOUS EVENT POS",
+  "short_name": "POS Screamous",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#121212",
+  "theme_color": "#F7A600",
+  "icons": [
+    {
+      "src": "logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
