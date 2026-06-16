@@ -859,7 +859,13 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
   function findRestockItem(barcode) { const item = inventoryData.find(i => String(i.Barcode || '').toLowerCase() === String(barcode).trim().toLowerCase()); if(item) { document.getElementById('rsName').value = item['Article Name'] + ' (Sz: ' + item.Size + ')'; document.getElementById('btnSubmitRestock').disabled = false; document.getElementById('rsQty').focus(); } else { document.getElementById('rsName').value = 'TIDAK DITEMUKAN!'; document.getElementById('btnSubmitRestock').disabled = true; } }
   function submitRestock() { 
   const barcode = document.getElementById('rsBarcode').value.trim(); 
-  const qtyInput = document.getElementById('rsqty');
+  const qtyInput = document.getElementById('rsQty'); // <-- HURUF Q BESAR
+  
+  // Pengaman: Pastikan input ditemukan sebelum dibaca nilainya
+  if (!qtyInput) {
+    console.error("Elemen rsQty tidak ditemukan!");
+    return;
+  }
   
   // Pengaman: Pastikan input ditemukan sebelum dibaca nilainya
   if (!qtyInput) {
