@@ -1,4 +1,4 @@
-const CACHE_NAME = 'screamous-pos-v2';
+const CACHE_NAME = 'screamous-pos-v3'; // Kita naikkan versinya ke v3
 const urlsToCache = [
   './',
   './index.html',
@@ -7,34 +7,44 @@ const urlsToCache = [
   './logo.png'
 ];
 
-// 1. Saat pertama kali aplikasi dibuka, simpan file dasar ke memori lokal
+// 1. Install & Langsung Aktif
 self.addEventListener('install', event => {
+  self.skipWaiting(); // Memaksa PWA langsung memakai versi terbaru tanpa menunggu ditutup
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(urlsToCache);
+    caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
+  );
+});
+
+// 2. Membersihkan Sampah Memori Lama (Agar togle tidak hilang)
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(cacheNames => {
+      return Promise.all(
+        cacheNames.map(cacheName => {
+          if (cacheName !== CACHE_NAME) {
+            return caches.delete(cacheName); // Hapus v1 dan v2
+          }
+        })
+      );
     })
   );
 });
 
-// 2. Saat internet mati, panggil file dari memori lokal
+// 3. Strategi Network-First (Cek internet dulu, kalau mati baru pakai lokal)
 self.addEventListener('fetch', event => {
-  // PENGECUALIAN: Jangan cache proses kirim data ke Google Sheets
   if (event.request.url.includes('script.google.com')) return;
   
   event.respondWith(
-    caches.match(event.request).then(response => {
-      // Jika ada di memori lokal, pakai yang lokal.
-      // Jika tidak ada (misal library Bootstrap/SweetAlert), ambil dari internet lalu otomatis simpan ke memori lokal untuk cadangan
-      return response || fetch(event.request).then(fetchResponse => {
-        return caches.open(CACHE_NAME).then(cache => {
-          if (!event.request.url.includes('chrome-extension')) {
-            cache.put(event.request, fetchResponse.clone());
-          }
-          return fetchResponse;
-        });
+    fetch(event.request).then(fetchResponse => {
+      return caches.open(CACHE_NAME).then(cache => {
+        if (!event.request.url.includes('chrome-extension')) {
+          cache.put(event.request, fetchResponse.clone());
+        }
+        return fetchResponse;
       });
     }).catch(() => {
-      console.log("Internet mati dan file belum masuk cache.");
+      // Kalau internet mati, ambil dari brankas memori
+      return caches.match(event.request);
     })
   );
 });
