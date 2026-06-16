@@ -1061,6 +1061,14 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
      }).togglePromoMode(isActive);
    };
 
+// --- ENGINE NAVIGASI ---
+function showPage(pageId) { 
+  if(pageId === 'closingPage') return; 
+  document.querySelectorAll('.page-section').forEach(el => el.classList.remove('active')); 
+  document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active')); 
+  const targetPage = document.getElementById(pageId);
+  if(targetPage) targetPage.classList.add('active'); 
+}
 
 // SENSOR OTOMATIS MATI/NYALA INTERNET
 window.addEventListener('online', () => { if (typeof checkOfflineBadge === 'function') checkOfflineBadge(); });
