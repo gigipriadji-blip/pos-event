@@ -1062,13 +1062,26 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
      }).togglePromoMode(isActive);
    };
 
-// --- ENGINE NAVIGASI ---
+// --- ENGINE NAVIGASI DENGAN INDIKATOR AKTIF ---
 function showPage(pageId) { 
   if(pageId === 'closingPage') return; 
+  
+  // 1. Sembunyikan semua kontainer halaman
   document.querySelectorAll('.page-section').forEach(el => el.classList.remove('active')); 
+  
+  // 2. Matikan semua garis bawah dan warna kuning di menu atas
   document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active')); 
+  
+  // 3. Munculkan halaman yang dituju
   const targetPage = document.getElementById(pageId);
   if(targetPage) targetPage.classList.add('active'); 
+  
+  // 4. Nyalakan kembali indikator garis bawah kuning pada tombol yang diklik
+  const activeMenu = Array.from(document.querySelectorAll('.nav-link')).find(el => {
+    const clickAttr = el.getAttribute('onclick') || '';
+    return clickAttr.includes(pageId);
+  });
+  if(activeMenu) activeMenu.classList.add('active');
 }
 
 // SENSOR OTOMATIS MATI/NYALA INTERNET
