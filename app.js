@@ -462,6 +462,7 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
     Promise.all(promises).then(() => {
       localStorage.removeItem('screamous_offline_trx'); checkOfflineBadge();
       Swal.fire('Sukses Sync!', 'Seluruh data offline berhasil disatukan ke database utama!', 'success');
+      if(typeof loadRecap === 'function') loadRecap();
       google.script.run.withSuccessHandler(data => { inventoryData = data; renderPosList(inventoryData); loadInventoryTable(); }).getInventory();
     }).catch(err => { Swal.fire('Sync Gagal', 'Koneksi Sheets terputus tengah jalan, silakan coba lagi!', 'error'); });
   }
