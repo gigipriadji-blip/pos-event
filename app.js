@@ -962,10 +962,11 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
       </tr>`;
     });
     document.getElementById('invTotalBadge').innerText = 'Total: ' + totalPcs + ' Pcs';
-    // --- KODE BARU: PENGHITUNG JUMLAH ARTIKEL ---
+   // --- KODE BARU: HITUNG FISIK BARIS TABEL YANG ADA DI LAYAR ---
   const articleBadge = document.getElementById('invArticleBadge');
+  const totalRows = document.querySelectorAll('#invTableBody tr').length;
   if(articleBadge) {
-      articleBadge.innerText = data.length + ' Artikel';
+      articleBadge.innerText = totalRows + ' Artikel';
   }
   }
   function downloadTemplate() { 
