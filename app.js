@@ -962,6 +962,11 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
       </tr>`;
     });
     document.getElementById('invTotalBadge').innerText = 'Total: ' + totalPcs + ' Pcs';
+    // --- KODE BARU: PENGHITUNG JUMLAH ARTIKEL ---
+  const articleBadge = document.getElementById('invArticleBadge');
+  if(articleBadge) {
+      articleBadge.innerText = data.length + ' Artikel';
+  }
   }
   function downloadTemplate() { 
     const ws_data = [['Barcode', 'Article Code', 'Article Name', 'Size', 'Price', 'Stock', 'Harga Promo']]; 
