@@ -962,14 +962,15 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
       </tr>`;
     });
     document.getElementById('invTotalBadge').innerText = 'Total: ' + totalPcs + ' Pcs';
-   // --- KODE BARU: HITUNG ARTIKEL UNIK (BERDASARKAN ARTICLE CODE) ---
+  // --- KODE BARU: HITUNG ARTIKEL UNIK DARI SUMBER DATA MENTAH ---
   const articleBadge = document.getElementById('invArticleBadge');
   if(articleBadge) {
       const uniqueArticles = new Set();
-      document.querySelectorAll('#invTableBody tr').forEach(row => {
-          // Mengambil teks dari kolom ke-2 (Article Code)
-          if(row.cells.length > 1) {
-              uniqueArticles.add(row.cells[1].innerText.trim());
+      // Kita hitung langsung dari array data Google Sheets, bukan dari tabel HTML
+      data.forEach(d => {
+          const code = d['Article Code'] || d['Article Name'];
+          if (code) {
+              uniqueArticles.add(String(code).trim());
           }
       });
       articleBadge.innerText = uniqueArticles.size + ' Artikel';
