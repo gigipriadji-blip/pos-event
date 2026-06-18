@@ -962,11 +962,17 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
       </tr>`;
     });
     document.getElementById('invTotalBadge').innerText = 'Total: ' + totalPcs + ' Pcs';
-   // --- KODE BARU: HITUNG FISIK BARIS TABEL YANG ADA DI LAYAR ---
+   // --- KODE BARU: HITUNG ARTIKEL UNIK (BERDASARKAN ARTICLE CODE) ---
   const articleBadge = document.getElementById('invArticleBadge');
-  const totalRows = document.querySelectorAll('#invTableBody tr').length;
   if(articleBadge) {
-      articleBadge.innerText = totalRows + ' Artikel';
+      const uniqueArticles = new Set();
+      document.querySelectorAll('#invTableBody tr').forEach(row => {
+          // Mengambil teks dari kolom ke-2 (Article Code)
+          if(row.cells.length > 1) {
+              uniqueArticles.add(row.cells[1].innerText.trim());
+          }
+      });
+      articleBadge.innerText = uniqueArticles.size + ' Artikel';
   }
   }
   function downloadTemplate() { 
