@@ -498,15 +498,41 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
   setTimeout(() => document.body.classList.remove('printing-receipt'), 1000);
 }
 
-    // KODE BARU FASE 3: POTONG STOK LOKAL & UPDATE DISPLAY SEKETIKA
-    const updateLocalStockAfterSale = async () => {
-      for (const item of cart) {
+    // KODE BARU FASE 3: POTONG STOK LOKAL & UPDATE DISPLAY SEKETIKA (BACKGROUND MODE)
+    // Berikan parameter 'cartSnapshot' agar mesin tetap ingat barang apa yang dipotong meski keranjang kasir sudah kosong
+    const updateLocalStockAfterSale = async (cartSnapshot) => {
+      for (const item of cartSnapshot) {
         let localItem = await db.inventory.get(item.barcode);
         if (localItem) {
           let newStock = (Number(localItem.Stock) || 0) - item.qty;
           await db.inventory.update(item.barcode, { Stock: newStock });
         }
       }
+      // Sedot ulang isi database lokal & render layar kiri di belakang layar
+      inventoryData = await db.inventory.toArray();
+      renderPosList(inventoryData);
+      if(typeof loadFreeStuffInventory === 'function') loadFreeStuffInventory();
+      if(typeof loadInventoryTable === 'function') loadInventoryTable();
+    };
+
+    // 1. Ambil "Jepretan Memori" (Snapshot) dari keranjang saat ini
+    const currentCartSnapshot = [...cart]; 
+    
+    // 2. Lempar tugas potong stok ke latar belakang (TANPA perintah 'await')
+    updateLocalStockAfterSale(currentCartSnapshot);
+
+    // 3. Eksekusi penyimpanan dan KOSONGKAN LAYAR SEKETIKA!
+    if (navigator.onLine) {
+      google.script.run
+        .withFailureHandler(err => { saveToLocalStorage(payload); })
+        .withSuccessHandler(res => { /* Server sukses, biarkan senyap di belakang */ })
+        .processTransaction(payload);
+        
+      clearCart(); // KOSONGKAN KERANJANG TANPA MENUNGGU SERVER ATAU LOKAL!
+    } else {
+      saveToLocalStorage(payload); // Ini sudah otomatis mengeksekusi clearCart() di dalamnya
+    }
+  } 
       // Sedot ulang isi database lokal terbaru ke memori aplikasi
       inventoryData = await db.inventory.toArray();
       renderPosList(inventoryData);
