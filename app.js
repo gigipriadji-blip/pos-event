@@ -986,10 +986,7 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
   function processExcel() { const fileInput = document.getElementById('excelFile'); if (!fileInput.files.length) return Swal.fire('Oops!', 'Pilih file Excel!', 'warning'); const reader = new FileReader(); reader.onload = function(e) { const workbook = XLSX.read(new Uint8Array(e.target.result), {type: 'array'}); const excelRows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]); if (excelRows.length === 0) return Swal.fire('Kosong!', 'File Excel kosong!', 'error'); if(!("Barcode" in excelRows[0])) return Swal.fire('Format Salah!', 'Template tidak valid.', 'error'); const btn = document.getElementById('btnUploadExcel'); btn.innerHTML = 'Loading...'; btn.disabled = true; google.script.run.withSuccessHandler(res => { Swal.fire('Berhasil!', res, 'success'); btn.innerHTML = '2. Upload & Import'; btn.disabled = false; fileInput.value = ''; google.script.run.withSuccessHandler(data => { inventoryData = data; loadInventoryTable(); loadFreeStuffInventory(); }).getInventory(); }).importBulkInventory(excelRows); };reader.readAsArrayBuffer(fileInput.files[0]); }
 
 // =========================================================================
-// ENGINE IMPORT REVOTA (XML PARSER & DATA AGGREGATOR)
-// =========================================================================
-// =========================================================================
-// ENGINE IMPORT REVOTA (XML PARSER & DATA AGGREGATOR) - VERSI RADAR GANAS
+// ENGINE IMPORT REVOTA (XML PARSER KUSUS FORMAT ADO ROWSET Z:ROW)
 // =========================================================================
 function processRevotaXML() {
   const fileInput = document.getElementById('xmlFile');
@@ -1005,47 +1002,31 @@ function processRevotaXML() {
       const parser = new DOMParser();
       const xmlDoc = parser.parseFromString(e.target.result, "text/xml");
 
-      // JURUS ANTI-GAGAL: Ambil semua elemen tanpa peduli nama tag atau namespace
-      const allElements = xmlDoc.getElementsByTagName("*");
-      const itemNodes = [];
-
-      // Cari elemen bungkusannya (parent baris) yang mengandung data barang
-      for (let i = 0; i < allElements.length; i++) {
-        let tagName = (allElements[i].localName || allElements[i].tagName).toLowerCase();
-        
-        // Kalau ketemu tag yang mirip-mirip ID barang atau Barcode
-        if (tagName === "item_id" || tagName === "barcode") {
-          let parent = allElements[i].parentNode;
-          // Masukkan parent-nya ke daftar jika belum ada
-          if (!itemNodes.includes(parent)) {
-            itemNodes.push(parent);
-          }
-        }
+      // TEMBAK LANGSUNG KE TAG Z:ROW (Format khas Revota)
+      let rows = xmlDoc.getElementsByTagName("z:row");
+      
+      // Fallback jika browser mengabaikan namespace 'z:'
+      if (rows.length === 0) {
+        rows = xmlDoc.getElementsByTagName("row"); 
       }
 
-      if (itemNodes.length === 0) throw new Error("Format XML sangat berbeda. Data barang (Item ID/Barcode) tidak ditemukan.");
+      if (rows.length === 0) throw new Error("Format XML tidak dikenali. Tag <z:row> tidak ditemukan.");
 
       const aggregatedData = {};
       let totalPcs = 0;
 
-      // Ekstrak data dari setiap bungkusan baris (parent)
-      for (let i = 0; i < itemNodes.length; i++) {
-        let parent = itemNodes[i];
-        let rawBarcode = "", artCode = "", artName = "", size = "", price = "", qty = "";
+      // Sisir semua baris <z:row> dan sedot atributnya
+      for (let i = 0; i < rows.length; i++) {
+        let row = rows[i];
 
-        // Sisir semua anak (kolom data) di dalam bungkusan tersebut
-        for (let j = 0; j < parent.children.length; j++) {
-          let child = parent.children[j];
-          let cName = (child.localName || child.tagName).toLowerCase();
-          let text = child.textContent.trim();
-
-          if (cName === "barcode") rawBarcode = text;
-          if (cName === "item_id") artCode = text;
-          if (cName === "description" || cName === "item_name") artName = text;
-          if (cName === "size_id" || cName === "size") size = text;
-          if (cName === "price" || cName === "s_price") price = text;
-          if (cName === "qty" || cName === "quantity") qty = text;
-        }
+        // Ekstraksi data langsung dari atribut baris
+        let rawBarcode = row.getAttribute('barcode') || "";
+        let artCode = row.getAttribute('articleCode') || "";
+        let artName = row.getAttribute('articleName') || "";
+        let size = row.getAttribute('sizes') || "";
+        let price = row.getAttribute('salePrice') || "0"; // Kita ambil salePrice untuk POS
+        let qty = row.getAttribute('qty') || "0";
+        let color = row.getAttribute('colourName') || ""; // Bonus: kita tarik juga warnanya!
 
         // Lewati jika data ini tidak punya barcode atau kode artikel yang valid
         if (!rawBarcode && !artCode) continue;
@@ -1070,8 +1051,8 @@ function processRevotaXML() {
             'Size': size,
             'Price': cleanPrice,
             'Stock': cleanQty,
-            'Category': 'Import Revota', // Penanda di database
-            'Color': ''
+            'Category': 'Import Revota', 
+            'Color': color // Warna dimasukkan ke kolom Color
           };
         }
       }
@@ -1079,7 +1060,7 @@ function processRevotaXML() {
       const finalArray = Object.values(aggregatedData);
       finalArray.forEach(item => totalPcs += item.Stock);
 
-      if (finalArray.length === 0) throw new Error("Gagal mengekstrak rincian artikel di dalam file XML.");
+      if (finalArray.length === 0) throw new Error("Gagal mengekstrak atribut barang. Format <z:row> kosong.");
 
       // --- ATURAN 3: TAMPILKAN PREVIEW ---
       Swal.fire({
