@@ -34,7 +34,8 @@
             <li class="nav-item"><a class="nav-link" onclick="showPage('inputPage')">Input Item</a></li>
             <li class="nav-item"><a class="nav-link" onclick="showPage('settingPage'); loadSettingsForm();">Setting</a></li>
           </ul>
-      
+
+      <span id="dbStatusBadge" class="badge bg-secondary ms-2 p-2 fs-6">⏳ Menyiapkan Database...</span>
       <span id="syncBadgeContainer" style="display:none;" class="me-3">
         <span id="syncCountBadge" class="badge bg-danger p-2 fs-6">⚠️ 0 Transaksi Pending</span>
         <button class="btn btn-sm btn-success fw-bold ms-1 text-dark" onclick="syncOfflineTransactions()"><i class="bi bi-cloud-upload"></i> Sync Data</button>
