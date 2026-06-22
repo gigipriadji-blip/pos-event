@@ -134,7 +134,7 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
     google.script.run.withSuccessHandler(settings => { currentSettings = settings; applyReceiptSettings(); loadSettingsForm(); calculateTotal(); }).getSettings();
     // KODE BARU: Jalankan mesin sinkronisasi lokal Dexie (Menggantikan getInventory lama)
     initDatabase();
-  }
+   }
     const today = new Date().toISOString().split('T')[0]; 
     document.getElementById('recapStartDate').value = today; document.getElementById('recapEndDate').value = today; document.getElementById('rfStartDate').value = today; document.getElementById('rfEndDate').value = today; document.getElementById('closingDateInput').value = today;
     
