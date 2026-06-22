@@ -985,6 +985,143 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
   }
   function processExcel() { const fileInput = document.getElementById('excelFile'); if (!fileInput.files.length) return Swal.fire('Oops!', 'Pilih file Excel!', 'warning'); const reader = new FileReader(); reader.onload = function(e) { const workbook = XLSX.read(new Uint8Array(e.target.result), {type: 'array'}); const excelRows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]); if (excelRows.length === 0) return Swal.fire('Kosong!', 'File Excel kosong!', 'error'); if(!("Barcode" in excelRows[0])) return Swal.fire('Format Salah!', 'Template tidak valid.', 'error'); const btn = document.getElementById('btnUploadExcel'); btn.innerHTML = 'Loading...'; btn.disabled = true; google.script.run.withSuccessHandler(res => { Swal.fire('Berhasil!', res, 'success'); btn.innerHTML = '2. Upload & Import'; btn.disabled = false; fileInput.value = ''; google.script.run.withSuccessHandler(data => { inventoryData = data; loadInventoryTable(); loadFreeStuffInventory(); }).getInventory(); }).importBulkInventory(excelRows); };reader.readAsArrayBuffer(fileInput.files[0]); }
 
+// =========================================================================
+// ENGINE IMPORT REVOTA (XML PARSER & DATA AGGREGATOR)
+// =========================================================================
+function processRevotaXML() {
+  const fileInput = document.getElementById('xmlFile');
+  if (!fileInput.files.length) return Swal.fire('Oops!', 'Pilih file XML Surat Jalan Revota terlebih dahulu!', 'warning');
+
+  const btn = document.getElementById('btnUploadXML');
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Membaca...';
+  btn.disabled = true;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(e.target.result, "text/xml");
+
+      // Cari semua elemen/baris yang memiliki data barang (Berpatokan pada tag Item_ID atau Barcode)
+      const items = xmlDoc.querySelectorAll("Item_ID, item_id, Barcode, barcode");
+      if (items.length === 0) throw new Error("Format XML tidak dikenali. Data barang tidak ditemukan.");
+
+      const aggregatedData = {};
+      let totalPcs = 0;
+
+      // Fungsi bantu pencari isi tag yang kebal huruf besar/kecil
+      const getVal = (parent, tags) => {
+        for (let tag of tags) {
+          let el = parent.querySelector(tag);
+          if (el) return el.textContent.trim();
+        }
+        return "";
+      };
+
+      for (let i = 0; i < items.length; i++) {
+        const parent = items[i].parentNode; // Ambil satu bungkus baris data
+
+        let rawBarcode = getVal(parent, ["Barcode", "barcode", "BARCODE"]);
+        let artCode = getVal(parent, ["Item_ID", "item_id", "ITEM_ID"]);
+        let artName = getVal(parent, ["Description", "description", "Item_Name", "item_name"]);
+        let size = getVal(parent, ["Size_ID", "size_id", "Size", "size"]);
+        let price = getVal(parent, ["Price", "price"]); // Mengambil harga surat jalan
+        let qty = getVal(parent, ["Qty", "qty", "Quantity"]);
+
+        // Lewati jika data ini tidak punya barcode atau kode artikel yang valid
+        if (!rawBarcode && !artCode) continue;
+        if (!rawBarcode) rawBarcode = artCode; // Fallback darurat
+
+        // --- ATURAN 1: TRANSLASI SIZE ---
+        if (size.toUpperCase() === "NON" || size === "-") {
+          size = "ALL SIZE";
+        }
+
+        let cleanPrice = Number(price.replace(/[^0-9]/g, '')) || 0;
+        let cleanQty = Number(qty.replace(/[^0-9]/g, '')) || 0;
+
+        // --- ATURAN 2: AKUMULASI DUPLIKAT ---
+        // Jika barcode yang sama muncul lagi (beda dus), jumlahkan stoknya sebelum dikirim ke Sheets
+        if (aggregatedData[rawBarcode]) {
+          aggregatedData[rawBarcode].Stock += cleanQty;
+        } else {
+          // Susun data agar strukturnya sama persis dengan yang diminta importBulkInventory()
+          aggregatedData[rawBarcode] = {
+            'Barcode': rawBarcode,
+            'Article Code': artCode,
+            'Article Name': artName,
+            'Size': size,
+            'Price': cleanPrice,
+            'Stock': cleanQty,
+            'Category': 'Import Revota', // Penanda di database
+            'Color': ''
+          };
+        }
+      }
+
+      // Ubah dari Object ke bentuk Array yang siap dikirim
+      const finalArray = Object.values(aggregatedData);
+      
+      // Hitung ulang total Pcs sesudah dijumlahkan
+      finalArray.forEach(item => totalPcs += item.Stock);
+
+      if (finalArray.length === 0) throw new Error("Tidak ada data artikel yang valid di file XML ini.");
+
+      // --- ATURAN 3: TAMPILKAN PREVIEW ---
+      Swal.fire({
+        title: 'File Revota Terbaca!',
+        html: `Ditemukan <b>${finalArray.length} Artikel Unik</b><br>Total Muatan: <b>${totalPcs} Pcs</b><br><br>Apakah Anda ingin menyinkronkan data ini ke Database?`,
+        icon: 'info',
+        showCancelButton: true,
+        confirmButtonColor: '#F7A600',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Ya, Sinkronkan!'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Menyinkronkan...';
+          
+          // MENGGUNAKAN JALUR GAIB: Menembak langsung ke fungsi Excel yang sudah ada di Code.gs!
+          google.script.run
+            .withFailureHandler(err => {
+              Swal.fire('Gagal di Server', err.message, 'error');
+              resetBtnXML();
+            })
+            .withSuccessHandler(res => {
+              Swal.fire('Berhasil!', 'Data Revota berhasil disinkronkan!\n\n' + res, 'success');
+              resetBtnXML();
+              fileInput.value = ''; // Kosongkan form
+              
+              // Refresh tabel Inventory PWA di layar
+              google.script.run.withSuccessHandler(data => {
+                inventoryData = data;
+                if(typeof loadInventoryTable === 'function') loadInventoryTable();
+                if(typeof loadFreeStuffInventory === 'function') loadFreeStuffInventory();
+              }).getInventory();
+            })
+            .importBulkInventory(finalArray); 
+        } else {
+          resetBtnXML();
+          fileInput.value = '';
+        }
+      });
+
+    } catch (error) {
+      Swal.fire('Error Baca File!', error.message, 'error');
+      resetBtnXML();
+    }
+  };
+
+  reader.readAsText(fileInput.files[0]); // Baca file XML sebagai Teks murni
+}
+
+function resetBtnXML() {
+  const btn = document.getElementById('btnUploadXML');
+  if(btn) {
+    btn.innerHTML = 'Proses Data Revota';
+    btn.disabled = false;
+  }
+}
+
   // --- FUNGSI RE-PRINT STRUK KASIR (NOTE TIDAK DICETAK KE STRUK KONSUMEN) ---
   window.reprintReceipt = function() {
     const trxId = document.getElementById('dtTrxId').innerText;
