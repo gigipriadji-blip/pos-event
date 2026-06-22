@@ -131,8 +131,8 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
     const fpConfig = { dateFormat: "Y-m-d", disableMobile: "true" };
     flatpickr("#recapStartDate", fpConfig); flatpickr("#recapEndDate", fpConfig); flatpickr("#rfStartDate", fpConfig); flatpickr("#rfEndDate", fpConfig); flatpickr("#closingDateInput", fpConfig);
     
+   if (navigator.onLine) { 
     google.script.run.withSuccessHandler(settings => { currentSettings = settings; applyReceiptSettings(); loadSettingsForm(); calculateTotal(); }).getSettings();
-    // KODE BARU: Jalankan mesin sinkronisasi lokal Dexie (Menggantikan getInventory lama)
     initDatabase();
    }
     const today = new Date().toISOString().split('T')[0]; 
