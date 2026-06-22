@@ -53,6 +53,63 @@ console.log("Brankas Lokal Dexie.js Siap Beroperasi!");
 // =========================================================================
 
 // =========================================================================
+// ENGINE SINKRONISASI INVENTORY (CLOUD <-> LOKAL)
+// =========================================================================
+async function initDatabase() {
+  const dbBadge = document.getElementById('dbStatusBadge');
+  if(dbBadge) {
+    dbBadge.className = 'badge bg-secondary ms-2 p-2 fs-6 text-white';
+    dbBadge.innerHTML = '<span class="spinner-border spinner-border-sm" style="width: 1rem; height: 1rem;"></span> Syncing...';
+  }
+
+  // Jika ada internet, sedot data terbaru dari Google Sheets
+  if (navigator.onLine) {
+    google.script.run
+      .withFailureHandler(err => {
+        console.error("Gagal tarik dari server, pindah ke lokal", err);
+        loadFromLocal();
+      })
+      .withSuccessHandler(async (data) => {
+        // 1. Bersihkan brankas lokal lama
+        await db.inventory.clear();
+        // 2. Simpan data terbaru ke brankas lokal
+        await db.inventory.bulkAdd(data);
+
+        // 3. Masukkan ke memori aplikasi kasir
+        inventoryData = data;
+        renderPosList(inventoryData);
+        if(typeof loadFreeStuffInventory === 'function') loadFreeStuffInventory();
+        if(typeof loadInventoryTable === 'function') loadInventoryTable();
+
+        // 4. Ubah indikator jadi HIJAU (Ready)
+        if(dbBadge) {
+          dbBadge.className = 'badge bg-success ms-2 p-2 fs-6 text-white';
+          dbBadge.innerHTML = '● Database Ready';
+        }
+      })
+      .getInventory();
+  } else {
+    // Jika internet mati sejak pagi, langsung buka brankas lokal
+    loadFromLocal();
+  }
+}
+
+// Fungsi darurat untuk membaca dari brankas lokal saat offline
+async function loadFromLocal() {
+  const data = await db.inventory.toArray();
+  inventoryData = data;
+  renderPosList(inventoryData);
+  if(typeof loadFreeStuffInventory === 'function') loadFreeStuffInventory();
+  if(typeof loadInventoryTable === 'function') loadInventoryTable();
+
+  const dbBadge = document.getElementById('dbStatusBadge');
+  if(dbBadge) {
+    dbBadge.className = 'badge bg-warning ms-2 p-2 fs-6 text-dark';
+    dbBadge.innerHTML = '⚡ Offline Mode (Local DB)';
+  }
+}
+
+// =========================================================================
 // =========================================================================
 // KODE ASLI APP.JS ANDA DIMULAI DI BAWAH INI
 // =========================================================================
@@ -75,7 +132,9 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
     flatpickr("#recapStartDate", fpConfig); flatpickr("#recapEndDate", fpConfig); flatpickr("#rfStartDate", fpConfig); flatpickr("#rfEndDate", fpConfig); flatpickr("#closingDateInput", fpConfig);
     
     google.script.run.withSuccessHandler(settings => { currentSettings = settings; applyReceiptSettings(); loadSettingsForm(); calculateTotal(); }).getSettings();
-    google.script.run.withSuccessHandler(data => { inventoryData = data; renderPosList(inventoryData); loadFreeStuffInventory(); loadInventoryTable(); }).getInventory();
+    // KODE BARU: Jalankan mesin sinkronisasi lokal Dexie (Menggantikan getInventory lama)
+    initDatabase();
+  } else {
     
     const today = new Date().toISOString().split('T')[0]; 
     document.getElementById('recapStartDate').value = today; document.getElementById('recapEndDate').value = today; document.getElementById('rfStartDate').value = today; document.getElementById('rfEndDate').value = today; document.getElementById('closingDateInput').value = today;
@@ -434,15 +493,36 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
   setTimeout(() => document.body.classList.remove('printing-receipt'), 1000);
 }
 
+    // KODE BARU FASE 3: POTONG STOK LOKAL & UPDATE DISPLAY SEKETIKA
+    const updateLocalStockAfterSale = async () => {
+      for (const item of cart) {
+        let localItem = await db.inventory.get(item.barcode);
+        if (localItem) {
+          let newStock = (Number(localItem.Stock) || 0) - item.qty;
+          await db.inventory.update(item.barcode, { Stock: newStock });
+        }
+      }
+      // Sedot ulang isi database lokal terbaru ke memori aplikasi
+      inventoryData = await db.inventory.toArray();
+      renderPosList(inventoryData);
+      if(typeof loadFreeStuffInventory === 'function') loadFreeStuffInventory();
+      if(typeof loadInventoryTable === 'function') loadInventoryTable();
+    };
+
     if (navigator.onLine) {
       google.script.run
         .withFailureHandler(err => { saveToLocalStorage(payload); })
-        .withSuccessHandler(res => { clearCart(); google.script.run.withSuccessHandler(data => { inventoryData = data; renderPosList(inventoryData); loadFreeStuffInventory(); loadInventoryTable(); }).getInventory(); })
+        .withSuccessHandler(async (res) => { 
+          await updateLocalStockAfterSale(); // Potong stok lokal dulu
+          clearCart(); 
+        })
         .processTransaction(payload);
     } else {
-      saveToLocalStorage(payload);
+      (async () => {
+        await updateLocalStockAfterSale(); // Potong stok lokal meskipun internet mati
+        saveToLocalStorage(payload);
+      })();
     }
-  }
 
   function saveToLocalStorage(payload) {
   let offlineData = JSON.parse(localStorage.getItem('screamous_offline_trx')) || [];
