@@ -136,8 +136,13 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
         // KODE BARU: Jalankan mesin sinkronisasi lokal Dexie
         initDatabase();
     }
-    const today = new Date().toISOString().split('T')[0]; 
-    document.getElementById('recapStartDate').value = today; document.getElementById('recapEndDate').value = today; document.getElementById('rfStartDate').value = today; document.getElementById('rfEndDate').value = today; document.getElementById('closingDateInput').value = today;
+    // KODE BARU: Perbaikan Bug Tanggal Tengah Malam (Waktu Lokal)
+    const nowLocal = new Date();
+    nowLocal.setMinutes(nowLocal.getMinutes() - nowLocal.getTimezoneOffset());
+    const today = nowLocal.toISOString().split('T')[0]; 
+    
+    document.getElementById('recapStartDate').value = today; document.getElementById('recapEndDate').value = today; document.getElementById('rfStartDate').value = today;
+    document.getElementById('rfEndDate').value = today; document.getElementById('closingDateInput').value = today;
     
     const posSearch = document.getElementById('posSearch');
     if(posSearch) posSearch.addEventListener('keypress', function(e) { if(e.key === 'Enter') { searchItem(this.value); this.value = ''; } });
