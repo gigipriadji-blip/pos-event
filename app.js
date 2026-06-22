@@ -523,7 +523,7 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
         saveToLocalStorage(payload);
       })();
     }
-
+  }
   function saveToLocalStorage(payload) {
   let offlineData = JSON.parse(localStorage.getItem('screamous_offline_trx')) || [];
   offlineData.push(payload);
