@@ -988,6 +988,9 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
 // =========================================================================
 // ENGINE IMPORT REVOTA (XML PARSER & DATA AGGREGATOR)
 // =========================================================================
+// =========================================================================
+// ENGINE IMPORT REVOTA (XML PARSER & DATA AGGREGATOR) - VERSI RADAR GANAS
+// =========================================================================
 function processRevotaXML() {
   const fileInput = document.getElementById('xmlFile');
   if (!fileInput.files.length) return Swal.fire('Oops!', 'Pilih file XML Surat Jalan Revota terlebih dahulu!', 'warning');
@@ -1002,31 +1005,47 @@ function processRevotaXML() {
       const parser = new DOMParser();
       const xmlDoc = parser.parseFromString(e.target.result, "text/xml");
 
-      // Cari semua elemen/baris yang memiliki data barang (Berpatokan pada tag Item_ID atau Barcode)
-      const items = xmlDoc.querySelectorAll("Item_ID, item_id, Barcode, barcode");
-      if (items.length === 0) throw new Error("Format XML tidak dikenali. Data barang tidak ditemukan.");
+      // JURUS ANTI-GAGAL: Ambil semua elemen tanpa peduli nama tag atau namespace
+      const allElements = xmlDoc.getElementsByTagName("*");
+      const itemNodes = [];
+
+      // Cari elemen bungkusannya (parent baris) yang mengandung data barang
+      for (let i = 0; i < allElements.length; i++) {
+        let tagName = (allElements[i].localName || allElements[i].tagName).toLowerCase();
+        
+        // Kalau ketemu tag yang mirip-mirip ID barang atau Barcode
+        if (tagName === "item_id" || tagName === "barcode") {
+          let parent = allElements[i].parentNode;
+          // Masukkan parent-nya ke daftar jika belum ada
+          if (!itemNodes.includes(parent)) {
+            itemNodes.push(parent);
+          }
+        }
+      }
+
+      if (itemNodes.length === 0) throw new Error("Format XML sangat berbeda. Data barang (Item ID/Barcode) tidak ditemukan.");
 
       const aggregatedData = {};
       let totalPcs = 0;
 
-      // Fungsi bantu pencari isi tag yang kebal huruf besar/kecil
-      const getVal = (parent, tags) => {
-        for (let tag of tags) {
-          let el = parent.querySelector(tag);
-          if (el) return el.textContent.trim();
+      // Ekstrak data dari setiap bungkusan baris (parent)
+      for (let i = 0; i < itemNodes.length; i++) {
+        let parent = itemNodes[i];
+        let rawBarcode = "", artCode = "", artName = "", size = "", price = "", qty = "";
+
+        // Sisir semua anak (kolom data) di dalam bungkusan tersebut
+        for (let j = 0; j < parent.children.length; j++) {
+          let child = parent.children[j];
+          let cName = (child.localName || child.tagName).toLowerCase();
+          let text = child.textContent.trim();
+
+          if (cName === "barcode") rawBarcode = text;
+          if (cName === "item_id") artCode = text;
+          if (cName === "description" || cName === "item_name") artName = text;
+          if (cName === "size_id" || cName === "size") size = text;
+          if (cName === "price" || cName === "s_price") price = text;
+          if (cName === "qty" || cName === "quantity") qty = text;
         }
-        return "";
-      };
-
-      for (let i = 0; i < items.length; i++) {
-        const parent = items[i].parentNode; // Ambil satu bungkus baris data
-
-        let rawBarcode = getVal(parent, ["Barcode", "barcode", "BARCODE"]);
-        let artCode = getVal(parent, ["Item_ID", "item_id", "ITEM_ID"]);
-        let artName = getVal(parent, ["Description", "description", "Item_Name", "item_name"]);
-        let size = getVal(parent, ["Size_ID", "size_id", "Size", "size"]);
-        let price = getVal(parent, ["Price", "price"]); // Mengambil harga surat jalan
-        let qty = getVal(parent, ["Qty", "qty", "Quantity"]);
 
         // Lewati jika data ini tidak punya barcode atau kode artikel yang valid
         if (!rawBarcode && !artCode) continue;
@@ -1041,11 +1060,9 @@ function processRevotaXML() {
         let cleanQty = Number(qty.replace(/[^0-9]/g, '')) || 0;
 
         // --- ATURAN 2: AKUMULASI DUPLIKAT ---
-        // Jika barcode yang sama muncul lagi (beda dus), jumlahkan stoknya sebelum dikirim ke Sheets
         if (aggregatedData[rawBarcode]) {
           aggregatedData[rawBarcode].Stock += cleanQty;
         } else {
-          // Susun data agar strukturnya sama persis dengan yang diminta importBulkInventory()
           aggregatedData[rawBarcode] = {
             'Barcode': rawBarcode,
             'Article Code': artCode,
@@ -1059,13 +1076,10 @@ function processRevotaXML() {
         }
       }
 
-      // Ubah dari Object ke bentuk Array yang siap dikirim
       const finalArray = Object.values(aggregatedData);
-      
-      // Hitung ulang total Pcs sesudah dijumlahkan
       finalArray.forEach(item => totalPcs += item.Stock);
 
-      if (finalArray.length === 0) throw new Error("Tidak ada data artikel yang valid di file XML ini.");
+      if (finalArray.length === 0) throw new Error("Gagal mengekstrak rincian artikel di dalam file XML.");
 
       // --- ATURAN 3: TAMPILKAN PREVIEW ---
       Swal.fire({
@@ -1080,7 +1094,6 @@ function processRevotaXML() {
         if (result.isConfirmed) {
           btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Menyinkronkan...';
           
-          // MENGGUNAKAN JALUR GAIB: Menembak langsung ke fungsi Excel yang sudah ada di Code.gs!
           google.script.run
             .withFailureHandler(err => {
               Swal.fire('Gagal di Server', err.message, 'error');
@@ -1091,7 +1104,6 @@ function processRevotaXML() {
               resetBtnXML();
               fileInput.value = ''; // Kosongkan form
               
-              // Refresh tabel Inventory PWA di layar
               google.script.run.withSuccessHandler(data => {
                 inventoryData = data;
                 if(typeof loadInventoryTable === 'function') loadInventoryTable();
@@ -1111,7 +1123,7 @@ function processRevotaXML() {
     }
   };
 
-  reader.readAsText(fileInput.files[0]); // Baca file XML sebagai Teks murni
+  reader.readAsText(fileInput.files[0]); 
 }
 
 function resetBtnXML() {
