@@ -532,29 +532,7 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
     } else {
       saveToLocalStorage(payload); // Ini sudah otomatis mengeksekusi clearCart() di dalamnya
     }
-  } 
-      // Sedot ulang isi database lokal terbaru ke memori aplikasi
-      inventoryData = await db.inventory.toArray();
-      renderPosList(inventoryData);
-      if(typeof loadFreeStuffInventory === 'function') loadFreeStuffInventory();
-      if(typeof loadInventoryTable === 'function') loadInventoryTable();
-    };
-
-    if (navigator.onLine) {
-      google.script.run
-        .withFailureHandler(err => { saveToLocalStorage(payload); })
-        .withSuccessHandler(async (res) => { 
-          await updateLocalStockAfterSale(); // Potong stok lokal dulu
-          clearCart(); 
-        })
-        .processTransaction(payload);
-    } else {
-      (async () => {
-        await updateLocalStockAfterSale(); // Potong stok lokal meskipun internet mati
-        saveToLocalStorage(payload);
-      })();
-    }
-  }
+  } // <--- Penutup fungsi executeFinalTransaction
   function saveToLocalStorage(payload) {
   let offlineData = JSON.parse(localStorage.getItem('screamous_offline_trx')) || [];
   offlineData.push(payload);
