@@ -37,6 +37,21 @@ const google = {
     run: createGasProxy(null, null)
   }
 };
+
+// =========================================================================
+// DATABASE LOKAL (INDEXEDDB VIA DEXIE.JS)
+// =========================================================================
+const db = new Dexie("ScreamousPOS_DB");
+
+// Kita buat dua tabel utama: 'inventory' untuk stok, dan 'transactions' untuk antrean kasir
+db.version(1).stores({
+  inventory: 'Barcode, ArticleCode, ArticleName, Size, Price, PromoPrice, Stock, Category, Color',
+  transactions: '++id, trxId, date, method, note, discount, grandTotal, cart, status' // status nanti berisi 'pending' atau 'synced'
+});
+
+console.log("Brankas Lokal Dexie.js Siap Beroperasi!");
+// =========================================================================
+
 // =========================================================================
 // =========================================================================
 // KODE ASLI APP.JS ANDA DIMULAI DI BAWAH INI
