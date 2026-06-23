@@ -1476,81 +1476,54 @@ window.addEventListener('keydown', function(event) {
     }
   }
 }, true); // Parameter 'true' ini wajib agar shortcut ini tidak diblokir komponen lain
+
 // =================================================================
-// ENGINE CETAK STRUK CLOSING HARIAN (DENGAN PRINT WINDOW)
+// ENGINE INTEGRASI CETAK CLOSING HARIAN (SESUAI TEMPLATE INDEX.HTML)
 // =================================================================
-function printClosingStruk() {
+function doPrintClosing() {
   const data = window.closingPrintData;
   
-  // Validasi: Jika data belum siap/belum di-load, jangan cetak
+  // 1. Validasi data closing
   if (!data) {
     Swal.fire('Opps', 'Data closing belum siap atau gagal dimuat!', 'warning');
     return;
   }
 
-  // Buka jendela cetak baru bypass pembatas browser
-  const printWindow = window.open('', '_blank', 'width=400,height=600');
+  // 2. Suntikkan data dari memori ke elemen template HTML index.html
+  if (document.getElementById('pcShopName')) {
+    document.getElementById('pcShopName').innerText = (window.currentSettings && window.currentSettings.shopName) || 'SCREAMOUS';
+  }
+  if (document.getElementById('pcDateTitle')) {
+    document.getElementById('pcDateTitle').innerText = data.date;
+  }
+  if (document.getElementById('pcPrintDate')) {
+    const now = new Date();
+    document.getElementById('pcPrintDate').innerText = now.toLocaleString('id-ID');
+  }
   
-  // Susun template nota thermal closing dengan style rapi
-  let html = `
-    <html>
-    <head>
-      <title>Print Struk Closing</title>
-      <style>
-        body { font-family: 'Courier New', Courier, monospace; font-size: 14px; color: #000; padding: 10px; margin: 0; }
-        .text-center { text-align: center; }
-        .bold { font-weight: bold; }
-        .line { border-bottom: 1px dashed #000; margin: 8px 0; }
-        .flex-space { display: flex; justify-content: space-between; margin: 4px 0; }
-        @media print { body { padding: 0; } }
-      </style>
-    </head>
-    <body>
-      <div class="text-center bold" style="font-size: 16px;">${(window.currentSettings && window.currentSettings.shopName) || 'SCREAMOUS'}</div>
-      <div class="text-center" style="font-size: 12px;">${(window.currentSettings && window.currentSettings.eventName) || 'EVENT REPORT'}</div>
-      <div class="line"></div>
-      <div class="text-center bold">LAPORAN CLOSING HARIAN</div>
-      <div class="text-center" style="font-size: 12px;">Tanggal: ${data.date}</div>
-      <div class="line"></div>
-      
-      <div class="flex-space"><span class="bold">Total Jual (Kotor):</span><span class="bold">Rp ${data.gross.toLocaleString('id-ID')}</span></div>
-      <div class="flex-space"><span>Total Diskon:</span><span>Rp ${data.disc.toLocaleString('id-ID')}</span></div>
-      <div class="line"></div>
-      <div class="flex-space"><span class="bold">TOTAL OMSET BERSIH:</span><span class="bold">Rp ${data.net.toLocaleString('id-ID')}</span></div>
-      <div class="flex-space"><span>Total Barang:</span><span>${data.qty} Pcs</span></div>
-      
-      <div class="line"></div>
-      <div class="text-center bold">RINCIAN PEMBAYARAN</div>
-      <div class="line"></div>
-      <div class="flex-space"><span>Tunai (CASH):</span><span>Rp ${data.cash.toLocaleString('id-ID')}</span></div>
-      <div class="flex-space"><span>EDC (CARD):</span><span>Rp ${data.card.toLocaleString('id-ID')}</span></div>
-      <div class="flex-space"><span>QRIS:</span><span>Rp ${data.qris.toLocaleString('id-ID')}</span></div>
-      <div class="flex-space"><span>Bank Transfer:</span><span>Rp ${data.transfer.toLocaleString('id-ID')}</span></div>
-      
-      <div class="line"></div>
-      <div class="text-center" style="font-size: 11px; margin-top: 15px;">-- Dokumen Dicetak Sistem POS --</div>
-    </body>
-    </html>
-  `;
+  // Suntik rincian omset
+  if (document.getElementById('pcQty')) document.getElementById('pcQty').innerText = data.qty + ' Pcs';
+  if (document.getElementById('pcGross')) document.getElementById('pcGross').innerText = 'Rp ' + data.gross.toLocaleString('id-ID');
+  if (document.getElementById('pcDisc')) document.getElementById('pcDisc').innerText = 'Rp ' + data.disc.toLocaleString('id-ID');
+  if (document.getElementById('pcNet')) document.getElementById('pcNet').innerText = 'Rp ' + data.net.toLocaleString('id-ID');
+  
+  // Suntik rincian metode pembayaran
+  if (document.getElementById('pcCash')) document.getElementById('pcCash').innerText = 'Rp ' + data.cash.toLocaleString('id-ID');
+  if (document.getElementById('pcCard')) document.getElementById('pcCard').innerText = 'Rp ' + data.card.toLocaleString('id-ID');
+  if (document.getElementById('pcQris')) document.getElementById('pcQris').innerText = 'Rp ' + data.qris.toLocaleString('id-ID');
+  if (document.getElementById('pcTransfer')) document.getElementById('pcTransfer').innerText = 'Rp ' + data.transfer.toLocaleString('id-ID');
 
-  printWindow.document.write(html);
-  printWindow.document.close();
-  
-  // Picu dialog printer bawaan OS
-  printWindow.focus();
-  setTimeout(() => {
-    printWindow.print();
-    printWindow.close();
-  }, 250);
+  // 3. Picu dialog print browser
+  // (Memanfaatkan library print style yang biasanya menyembunyikan elemen lain & hanya memunculkan #printClosingArea)
+  window.print();
 }
 
 // =================================================================
-// SAMBUNGKAN KE TOMBOL HTML (EVENT LISTENER)
+// PEREKAT TOMBOL DI MODAL (EVENT LISTENER)
 // =================================================================
-document.addEventListener('DOMContentLoaded', () => {
-  // Pastikan ID 'btnPrintClosing' di bawah ini sama persis dengan yang ada di file index.html Mas
-  const btnPrint = document.getElementById('btnPrintClosing'); 
-  if (btnPrint) {
-    btnPrint.addEventListener('click', printClosingStruk);
+document.addEventListener('click', function(event) {
+  // Mencari elemen tombol berdasarkan teks atau class jika id dinamis
+  if (event.target && event.target.textContent.trim() === 'PRINT STRUK CLOSING') {
+    doPrintClosing();
   }
 });
