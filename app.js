@@ -393,7 +393,11 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
     togglePaymentUI();
 
     renderCart();
+    const scannerInput = document.getElementById('barcodeInput');
+  if (scannerInput) {
+    scannerInput.focus();
   }
+}
 
   function calculateTotal() {
     let totalQty = 0;
@@ -550,21 +554,9 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
   offlineData.push(payload);
   localStorage.setItem('screamous_offline_trx', JSON.stringify(offlineData));
   clearCart();
-
-  // KODE BARU: TOAST NOTIFICATION 
-  Swal.fire({
-    toast: true,
-    position: 'top-end',
-    icon: 'warning',
-    title: 'Tersimpan Offline!',
-    text: 'Data aman. Jangan lupa klik Sync saat online.',
-    showConfirmButton: false,
-    timer: 2500,
-    timerProgressBar: true,
-    customClass: { popup: 'colored-toast' }
-  });
-
-  if (typeof checkOfflineBadge === 'function') checkOfflineBadge(); // <-- Alarm ditambahkan di sini
+  
+  // Trigger pembaruan badge merah tanpa memunculkan pop-up apapun
+  if (typeof checkOfflineBadge === 'function') checkOfflineBadge(); 
 }
 
   function checkOfflineBadge() {
