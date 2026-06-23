@@ -1476,3 +1476,81 @@ window.addEventListener('keydown', function(event) {
     }
   }
 }, true); // Parameter 'true' ini wajib agar shortcut ini tidak diblokir komponen lain
+// =================================================================
+// ENGINE CETAK STRUK CLOSING HARIAN (DENGAN PRINT WINDOW)
+// =================================================================
+function printClosingStruk() {
+  const data = window.closingPrintData;
+  
+  // Validasi: Jika data belum siap/belum di-load, jangan cetak
+  if (!data) {
+    Swal.fire('Opps', 'Data closing belum siap atau gagal dimuat!', 'warning');
+    return;
+  }
+
+  // Buka jendela cetak baru bypass pembatas browser
+  const printWindow = window.open('', '_blank', 'width=400,height=600');
+  
+  // Susun template nota thermal closing dengan style rapi
+  let html = `
+    <html>
+    <head>
+      <title>Print Struk Closing</title>
+      <style>
+        body { font-family: 'Courier New', Courier, monospace; font-size: 14px; color: #000; padding: 10px; margin: 0; }
+        .text-center { text-align: center; }
+        .bold { font-weight: bold; }
+        .line { border-bottom: 1px dashed #000; margin: 8px 0; }
+        .flex-space { display: flex; justify-content: space-between; margin: 4px 0; }
+        @media print { body { padding: 0; } }
+      </style>
+    </head>
+    <body>
+      <div class="text-center bold" style="font-size: 16px;">${(window.currentSettings && window.currentSettings.shopName) || 'SCREAMOUS'}</div>
+      <div class="text-center" style="font-size: 12px;">${(window.currentSettings && window.currentSettings.eventName) || 'EVENT REPORT'}</div>
+      <div class="line"></div>
+      <div class="text-center bold">LAPORAN CLOSING HARIAN</div>
+      <div class="text-center" style="font-size: 12px;">Tanggal: ${data.date}</div>
+      <div class="line"></div>
+      
+      <div class="flex-space"><span class="bold">Total Jual (Kotor):</span><span class="bold">Rp ${data.gross.toLocaleString('id-ID')}</span></div>
+      <div class="flex-space"><span>Total Diskon:</span><span>Rp ${data.disc.toLocaleString('id-ID')}</span></div>
+      <div class="line"></div>
+      <div class="flex-space"><span class="bold">TOTAL OMSET BERSIH:</span><span class="bold">Rp ${data.net.toLocaleString('id-ID')}</span></div>
+      <div class="flex-space"><span>Total Barang:</span><span>${data.qty} Pcs</span></div>
+      
+      <div class="line"></div>
+      <div class="text-center bold">RINCIAN PEMBAYARAN</div>
+      <div class="line"></div>
+      <div class="flex-space"><span>Tunai (CASH):</span><span>Rp ${data.cash.toLocaleString('id-ID')}</span></div>
+      <div class="flex-space"><span>EDC (CARD):</span><span>Rp ${data.card.toLocaleString('id-ID')}</span></div>
+      <div class="flex-space"><span>QRIS:</span><span>Rp ${data.qris.toLocaleString('id-ID')}</span></div>
+      <div class="flex-space"><span>Bank Transfer:</span><span>Rp ${data.transfer.toLocaleString('id-ID')}</span></div>
+      
+      <div class="line"></div>
+      <div class="text-center" style="font-size: 11px; margin-top: 15px;">-- Dokumen Dicetak Sistem POS --</div>
+    </body>
+    </html>
+  `;
+
+  printWindow.document.write(html);
+  printWindow.document.close();
+  
+  // Picu dialog printer bawaan OS
+  printWindow.focus();
+  setTimeout(() => {
+    printWindow.print();
+    printWindow.close();
+  }, 250);
+}
+
+// =================================================================
+// SAMBUNGKAN KE TOMBOL HTML (EVENT LISTENER)
+// =================================================================
+document.addEventListener('DOMContentLoaded', () => {
+  // Pastikan ID 'btnPrintClosing' di bawah ini sama persis dengan yang ada di file index.html Mas
+  const btnPrint = document.getElementById('btnPrintClosing'); 
+  if (btnPrint) {
+    btnPrint.addEventListener('click', printClosingStruk);
+  }
+});
