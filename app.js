@@ -42,11 +42,11 @@ const google = {
 // DATABASE LOKAL (INDEXEDDB VIA DEXIE.JS)
 // =========================================================================
 const db = new Dexie("ScreamousPOS_DB");
-
-// Kita buat dua tabel utama: 'inventory' untuk stok, dan 'transactions' untuk antrean kasir
-db.version(1).stores({
+db.version(2).stores({ // <-- Versi naik ke 2
   inventory: 'Barcode, ArticleCode, ArticleName, Size, Price, PromoPrice, Stock, Category, Color',
-  transactions: '++id, trxId, date, method, note, discount, grandTotal, cart, status' // status nanti berisi 'pending' atau 'synced'
+  transactions: '++id, trxId, date, method, note, discount, grandTotal, cart, status',
+  history_recap: 'trxId, date, method, note, discount, grandTotal', // <-- Laci baru 1
+  history_detail: '++id, trxId, barcode, articleName, size, qty, price, subtotal' // <-- Laci baru 2
 });
 
 console.log("Brankas Lokal Dexie.js Siap Beroperasi!");
@@ -80,6 +80,18 @@ async function initDatabase() {
         renderPosList(inventoryData);
         if(typeof loadFreeStuffInventory === 'function') loadFreeStuffInventory();
         if(typeof loadInventoryTable === 'function') loadInventoryTable();
+
+        // 3.5 SEDOT HISTORI 3 HARI KE LACI LOKAL (Latar Belakang)
+        google.script.run.withSuccessHandler(async (hist) => {
+          if(hist.status === 'success') {
+             await db.history_recap.clear();
+             await db.history_detail.clear();
+             let hRecap = hist.recap.map(r => ({ trxId: r[0], date: r[1], method: r[2], note: r[3], discount: r[4], grandTotal: r[5] }));
+             let hDetail = hist.details.map(d => ({ trxId: d[0], barcode: d[1], articleName: d[2], size: d[3], qty: d[4], price: d[5], subtotal: d[6] }));
+             if(hRecap.length > 0) await db.history_recap.bulkAdd(hRecap);
+             if(hDetail.length > 0) await db.history_detail.bulkAdd(hDetail);
+          }
+        }).getRecentHistoryData();
 
         // 4. Ubah indikator jadi HIJAU (Ready)
         if(dbBadge) {
@@ -861,9 +873,42 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
   function loadFreeStuffLogTable() { const tbody = document.getElementById('recapFreeTableBody'); tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Memuat data histori...</td></tr>'; google.script.run.withFailureHandler(err => { tbody.innerHTML = `<tr><td colspan="7" class="text-danger text-center">Gagal memuat: ${err.message}</td></tr>`; }).withSuccessHandler(logs => { freeLogData = logs; filterFreeLog(); }).getFreeStuffLog(); }
   function filterFreeLog() { const startDate = document.getElementById('rfStartDate').value; const endDate = document.getElementById('rfEndDate').value; const tbody = document.getElementById('recapFreeTableBody'); tbody.innerHTML = ''; const filtered = freeLogData.filter(row => { let matchDate = true; if (startDate && endDate && row[0]) { const dDate = new Date(row[0]); if(!isNaN(dDate)) { const sDate = new Date(startDate); sDate.setHours(0,0,0,0); const eDate = new Date(endDate); eDate.setHours(23,59,59,999); matchDate = dDate >= sDate && dDate <= eDate; } } return matchDate; }); if(filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Belum ada data di rentang waktu ini.</td></tr>'; document.getElementById('rfTotalQtyBadge').innerText = '0 Pcs'; document.getElementById('rfTotalNominalBadge').innerText = 'Rp 0'; return; } let totalQty = 0; let totalNominal = 0; filtered.reverse().forEach(row => { totalQty += Number(row[4]) || 0; let nominal = row[5]; let cleanNom = Number(String(nominal).replace(/[^0-9]/g, '')) || 0; totalNominal += cleanNom; if(!String(nominal).includes('Rp')) nominal = 'Rp ' + cleanNom.toLocaleString('id-ID'); let displayDate = "-"; let dateObj = new Date(row[0]); if(!isNaN(dateObj)) displayDate = dateObj.toLocaleString('id-ID'); tbody.innerHTML += `<tr><td><small class="text-muted">${displayDate}</small></td><td><strong>${row[2]}</strong><br><small class="text-warning">${row[1]}</small></td><td>${row[3]}</td><td class="text-success fw-bold">${row[4]}</td><td class="text-warning">${nominal}</td><td><span class="badge bg-info text-dark">${row[6]}</span></td><td><small>${row[7]}</small></td></tr>`; }); document.getElementById('rfTotalQtyBadge').innerText = totalQty + ' Pcs'; document.getElementById('rfTotalNominalBadge').innerText = 'Rp ' + totalNominal.toLocaleString('id-ID'); }
 
-  // --- ENGINE REKAP PENJUALAN ---
-  function loadRecap() { const tbody = document.getElementById('recapTableBody'); tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Memuat data rekap...</td></tr>'; google.script.run.withFailureHandler(err => { tbody.innerHTML = `<tr><td colspan="6" class="text-danger text-center">Gagal memuat: ${err.message}</td></tr>`; }).withSuccessHandler(res => { recapData = res.salesData; filterRecap(); }).getSalesRecap(); }
-  
+  // --- ENGINE REKAP PENJUALAN (DUAL-MODE ONLINE/OFFLINE) ---
+  async function loadRecap() { 
+    const tbody = document.getElementById('recapTableBody');
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Memuat data rekap...</td></tr>'; 
+    
+    if (navigator.onLine) {
+      // JALUR ONLINE: Bebas tanpa batas tarik dari Sheets
+      google.script.run.withFailureHandler(err => { 
+        tbody.innerHTML = `<tr><td colspan="6" class="text-danger text-center">Gagal memuat: ${err.message}</td></tr>`; 
+      }).withSuccessHandler(res => { 
+        recapData = res.salesData; filterRecap(); 
+      }).getSalesRecap();
+    } else {
+      // JALUR OFFLINE: Gabungkan Histori Lokal (3 Hari) + Transaksi Pending Hari Ini
+      try {
+        let offlineRecap = [];
+        // 1. Tarik dari Laci Dexie
+        const localHist = await db.history_recap.toArray();
+        localHist.forEach(h => offlineRecap.push([h.trxId, h.date, h.method, h.note, h.discount, h.grandTotal]));
+        
+        // 2. Tarik dari Transaksi Pending (Belum di-Sync)
+        const pending = JSON.parse(localStorage.getItem('screamous_offline_trx')) || [];
+        pending.forEach(p => {
+           let dStr = new Date(Number(p.trxId.replace('TRX-',''))).toISOString();
+           offlineRecap.push([p.trxId, dStr, p.paymentMethod, p.note, p.discount, p.grandTotal]);
+        });
+
+        recapData = offlineRecap;
+        filterRecap();
+        Swal.fire({toast:true, position:'top-end', icon:'info', title:'Mode Laporan Offline Aktif', showConfirmButton:false, timer:3000});
+      } catch(e) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-danger text-center">Gagal muat memori lokal: ${e.message}</td></tr>`;
+      }
+    }
+  }
+
   function filterRecap() { 
     const q = document.getElementById('recapSearch').value.toLowerCase().trim(); 
     const startDate = document.getElementById('recapStartDate').value; 
@@ -956,8 +1001,69 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
   }
 
   // --- ENGINE CLOSING HARIAN ---
-  function loadClosingData() { const cDateStr = document.getElementById('closingDateInput').value; if(!cDateStr) return; google.script.run.withFailureHandler(err => Swal.fire("Gagal", err.message, "error")).withSuccessHandler(res => { const allSales = res.salesData; let gross = 0; let disc = 0; let net = 0; let mCash = 0; let mCard = 0; let mQris = 0; let mTransfer = 0; let totalQty = 0; const sDate = new Date(cDateStr); sDate.setHours(0,0,0,0); const eDate = new Date(cDateStr); eDate.setHours(23,59,59,999); google.script.run.withFailureHandler(err => Swal.fire("Gagal", err.message, "error")).withSuccessHandler(details => { allSales.forEach(sale => { const dDate = new Date(sale[1]); if(!isNaN(dDate) && dDate >= sDate && dDate <= eDate) { const trxId = sale[0]; const method = String(sale[2]).toUpperCase(); const discount = Number(String(sale[4]).replace(/[^0-9]/g, '')) || 0; const grand = Number(String(sale[5]).replace(/[^0-9]/g, '')) || 0; const subtotal = grand + discount; gross += subtotal; disc += discount; net += grand; if(method === 'CASH') mCash += grand; else if(method === 'CARD') mCard += grand; else if(method === 'QRIS') mQris += grand; else if(method === 'TRANSFER') mTransfer += grand; details.forEach(det => { if(det[0] === trxId) { totalQty += Number(det[4]) || 0; } }); } }); document.getElementById('closeGross').innerText = 'Rp ' + gross.toLocaleString('id-ID'); document.getElementById('closeDisc').innerText = 'Rp ' + disc.toLocaleString('id-ID'); document.getElementById('closeNet').innerText = 'Rp ' + net.toLocaleString('id-ID'); document.getElementById('closeQty').innerText = totalQty + ' Pcs'; document.getElementById('closeCash').innerText = 'Rp ' + mCash.toLocaleString('id-ID'); document.getElementById('closeCard').innerText = 'Rp ' + mCard.toLocaleString('id-ID'); document.getElementById('closeQris').innerText = 'Rp ' + mQris.toLocaleString('id-ID'); document.getElementById('closeTransfer').innerText = 'Rp ' + mTransfer.toLocaleString('id-ID'); window.closingPrintData = { date: cDateStr, qty: totalQty, gross: gross, disc: disc, net: net, cash: mCash, card: mCard, qris: mQris, transfer: mTransfer }; }).getTrxDetails(''); }).getSalesRecap(); }
-  function printClosingReport() { if(!window.closingPrintData) return Swal.fire('Perhatian', 'Silakan muat data closing terlebih dahulu!', 'warning'); const d = window.closingPrintData; document.getElementById('pcDateTitle').innerText = "Tanggal: " + new Date(d.date).toLocaleDateString('id-ID'); document.getElementById('pcPrintDate').innerText = new Date().toLocaleString('id-ID'); document.getElementById('pcQty').innerText = d.qty + " Pcs"; document.getElementById('pcGross').innerText = "Rp " + d.gross.toLocaleString('id-ID'); document.getElementById('pcDisc').innerText = "Rp " + d.disc.toLocaleString('id-ID'); document.getElementById('pcNet').innerText = "Rp " + d.net.toLocaleString('id-ID'); document.getElementById('pcCash').innerText = "Rp " + d.cash.toLocaleString('id-ID'); document.getElementById('pcCard').innerText = "Rp " + d.card.toLocaleString('id-ID'); document.getElementById('pcQris').innerText = "Rp " + d.qris.toLocaleString('id-ID'); document.getElementById('pcTransfer').innerText = "Rp " + d.transfer.toLocaleString('id-ID'); document.body.classList.add('printing-closing'); window.print(); setTimeout(() => document.body.classList.remove('printing-closing'), 1000); }
+ // --- ENGINE CLOSING HARIAN (DUAL-MODE ONLINE/OFFLINE) ---
+  async function loadClosingData() { 
+    const cDateStr = document.getElementById('closingDateInput').value; if(!cDateStr) return;
+    
+    // Mesin Hitung Internal (Digunakan oleh Online maupun Offline)
+    const processClosing = (allSales, details) => {
+      let gross = 0; let disc = 0; let net = 0; let mCash = 0; let mCard = 0; let mQris = 0; let mTransfer = 0; let totalQty = 0;
+      const sDate = new Date(cDateStr); sDate.setHours(0,0,0,0);
+      const eDate = new Date(cDateStr); eDate.setHours(23,59,59,999);
+      
+      allSales.forEach(sale => {
+        const dDate = new Date(sale[1]);
+        if(!isNaN(dDate) && dDate >= sDate && dDate <= eDate) {
+          const trxId = sale[0]; const method = String(sale[2]).toUpperCase();
+          const discount = Number(String(sale[4]).replace(/[^0-9]/g, '')) || 0;
+          const grand = Number(String(sale[5]).replace(/[^0-9]/g, '')) || 0;
+          const subtotal = grand + discount;
+          gross += subtotal; disc += discount; net += grand;
+          if(method === 'CASH') mCash += grand; else if(method === 'CARD') mCard += grand;
+          else if(method === 'QRIS') mQris += grand; else if(method === 'TRANSFER') mTransfer += grand;
+          details.forEach(det => { if(det[0] === trxId) { totalQty += Number(det[4]) || 0; } });
+        }
+      });
+      
+      document.getElementById('closeGross').innerText = 'Rp ' + gross.toLocaleString('id-ID');
+      document.getElementById('closeDisc').innerText = 'Rp ' + disc.toLocaleString('id-ID');
+      document.getElementById('closeNet').innerText = 'Rp ' + net.toLocaleString('id-ID');
+      document.getElementById('closeQty').innerText = totalQty + ' Pcs';
+      document.getElementById('closeCash').innerText = 'Rp ' + mCash.toLocaleString('id-ID');
+      document.getElementById('closeCard').innerText = 'Rp ' + mCard.toLocaleString('id-ID');
+      document.getElementById('closeQris').innerText = 'Rp ' + mQris.toLocaleString('id-ID');
+      document.getElementById('closeTransfer').innerText = 'Rp ' + mTransfer.toLocaleString('id-ID');
+      window.closingPrintData = { date: cDateStr, qty: totalQty, gross: gross, disc: disc, net: net, cash: mCash, card: mCard, qris: mQris, transfer: mTransfer };
+    };
+
+    if (navigator.onLine) {
+      // JALUR ONLINE
+      google.script.run.withFailureHandler(err => Swal.fire("Gagal", err.message, "error")).withSuccessHandler(res => { 
+        google.script.run.withFailureHandler(err => Swal.fire("Gagal", err.message, "error")).withSuccessHandler(details => { 
+          processClosing(res.salesData, details); 
+        }).getTrxDetails(''); 
+      }).getSalesRecap(); 
+    } else {
+      // JALUR OFFLINE
+      try {
+        let offlineRecap = []; let offlineDetails = [];
+        const localHist = await db.history_recap.toArray();
+        localHist.forEach(h => offlineRecap.push([h.trxId, h.date, h.method, h.note, h.discount, h.grandTotal]));
+        const localDet = await db.history_detail.toArray();
+        localDet.forEach(d => offlineDetails.push([d.trxId, d.barcode, d.articleName, d.size, d.qty, d.price, d.subtotal]));
+        
+        const pending = JSON.parse(localStorage.getItem('screamous_offline_trx')) || [];
+        pending.forEach(p => {
+           let dStr = new Date(Number(p.trxId.replace('TRX-',''))).toISOString();
+           offlineRecap.push([p.trxId, dStr, p.paymentMethod, p.note, p.discount, p.grandTotal]);
+           p.cart.forEach(c => offlineDetails.push([p.trxId, c.barcode, c.articleName, c.size, c.qty, c.price, c.subtotal]));
+        });
+        
+        processClosing(offlineRecap, offlineDetails);
+        Swal.fire({toast:true, position:'top-end', icon:'info', title:'Data Offline Ditampilkan', showConfirmButton:false, timer:3000});
+      } catch(e) { Swal.fire("Gagal", "Error baca data lokal: " + e.message, "error"); }
+    }
+  }
 
   // --- FITUR RESTOCK CEPAT ---
   function openRestockModal(barcode) { const modal = new bootstrap.Modal(document.getElementById('restockModal')); modal.show(); document.getElementById('rsBarcode').value = barcode; findRestockItem(barcode); }
