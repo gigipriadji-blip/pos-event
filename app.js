@@ -1461,13 +1461,18 @@ if ('serviceWorker' in navigator) {
 // =================================================================
 // SHORTCUT KEYBOARD: TEKAN ESC UNTUK FOKUS KE SCANNER BARCODE
 // =================================================================
-document.addEventListener('keydown', function(event) {
+window.addEventListener('keyup', function(event) {
   if (event.key === 'Escape' || event.key === 'Esc') {
-    const scannerInput = document.getElementById('barcodeInput');
+    // TIPS: Pastikan 'barcodeInput' di bawah ini sama persis dengan id di index.html Mas
+    const scannerInput = document.getElementById('barcodeInput'); 
     if (scannerInput) {
-      event.preventDefault(); // Mencegah aksi bawaan browser (misal menutup modal/hal lain)
-      scannerInput.focus();
-      scannerInput.select(); // Tambahan: Blok teks di dalamnya jika ada sisa ketikan salah agar langsung tertimpa
+      event.preventDefault();
+      event.stopPropagation(); // Mencegah library lain (seperti Bootstrap) ikut campur
+      
+      setTimeout(() => {
+        scannerInput.focus();
+        scannerInput.select();
+      }, 50); // Diberi jeda 50 milidetik agar proses penutupan modal selesai dulu, baru kursor melompat
     }
   }
 });
