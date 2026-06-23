@@ -550,7 +550,24 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
   offlineData.push(payload);
   localStorage.setItem('screamous_offline_trx', JSON.stringify(offlineData));
   clearCart();
-  Swal.fire('Mode Darurat Offline', 'Data diamankan di memori laptop. Tekan tombol Sync di atas jika internet kembali normal.', 'warning');
+  localStorage.setItem('screamous_offline_trx', JSON.stringify(offlineData));
+  clearCart();
+  
+  // KODE BARU: TOAST NOTIFICATION (Pengganti baris 553)
+  Swal.fire({
+    toast: true,
+    position: 'top-end',
+    icon: 'warning',
+    title: 'Tersimpan Offline!',
+    text: 'Data aman. Jangan lupa klik Sync saat online.',
+    showConfirmButton: false,
+    timer: 2500,
+    timerProgressBar: true,
+    customClass: { popup: 'colored-toast' }
+  });
+
+  if (typeof checkOfflineBadge === 'function') checkOfflineBadge(); // <-- Alarm ditambahkan di sini
+}
   if (typeof checkOfflineBadge === 'function') checkOfflineBadge(); // <-- Alarm ditambahkan di sini
 }
 
