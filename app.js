@@ -1478,7 +1478,7 @@ window.addEventListener('keydown', function(event) {
 }, true); // Parameter 'true' ini wajib agar shortcut ini tidak diblokir komponen lain
 
 // =================================================================
-// ENGINE INTEGRASI CETAK CLOSING HARIAN (SESUAI TEMPLATE INDEX.HTML)
+// ENGINE INTEGRASI CETAK CLOSING HARIAN (MENGGUNAKAN POP-UP WINDOW)
 // =================================================================
 window.printClosingReport = function() {
   const data = window.closingPrintData;
@@ -1488,7 +1488,7 @@ window.printClosingReport = function() {
     return;
   }
 
-  // Menyuntikkan data dari memori ke elemen template HTML index.html
+  // 1. Suntikkan data dari memori ke elemen template HTML index.html
   const setEl = (id, val) => { if(document.getElementById(id)) document.getElementById(id).innerText = val; };
 
   setEl('pcShopName', (window.currentSettings && window.currentSettings.shopName) || 'SCREAMOUS');
@@ -1505,8 +1505,37 @@ window.printClosingReport = function() {
   setEl('pcQris', 'Rp ' + data.qris.toLocaleString('id-ID'));
   setEl('pcTransfer', 'Rp ' + data.transfer.toLocaleString('id-ID'));
 
-  // Eksekusi Print (Menambahkan jeda agar elemen HTML sempat ter-update)
-  setTimeout(() => {
-    window.print();
-  }, 200);
+  // 2. Ambil struktur HTML template yang sudah terisi data
+  const printContent = document.getElementById('printClosingArea').innerHTML;
+
+  // 3. Buka jendela print baru (Bypass CSS yang bikin blank)
+  const printWindow = window.open('', '_blank', 'width=400,height=600');
+  if (!printWindow) {
+      Swal.fire('Pop-up Terblokir!', 'Browser memblokir jendela Print. Harap izinkan pop-up (Always allow).', 'warning');
+      return;
+  }
+
+  // 4. Render tampilan struk kasir thermal
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>Print Closing Harian</title>
+        <style>
+          body { font-family: 'Courier New', Courier, monospace; color: black; background: white; margin: 0; padding: 10px; }
+          hr { border: 0; border-top: 1px dashed #000; margin: 8px 0; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        ${printContent}
+        <script>
+          setTimeout(() => { 
+            window.print(); 
+            window.close(); 
+          }, 500);
+        <\/script>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
 };
