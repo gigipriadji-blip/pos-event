@@ -1458,3 +1458,16 @@ if ('serviceWorker' in navigator) {
       .catch(err => console.error('PWA Gagal didaftarkan:', err));
   });
 }
+// =================================================================
+// SHORTCUT KEYBOARD: TEKAN ESC UNTUK FOKUS KE SCANNER BARCODE
+// =================================================================
+document.addEventListener('keydown', function(event) {
+  if (event.key === 'Escape' || event.key === 'Esc') {
+    const scannerInput = document.getElementById('barcodeInput');
+    if (scannerInput) {
+      event.preventDefault(); // Mencegah aksi bawaan browser (misal menutup modal/hal lain)
+      scannerInput.focus();
+      scannerInput.select(); // Tambahan: Blok teks di dalamnya jika ada sisa ketikan salah agar langsung tertimpa
+    }
+  }
+});
