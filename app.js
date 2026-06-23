@@ -1459,20 +1459,19 @@ if ('serviceWorker' in navigator) {
   });
 }
 // =================================================================
-// SHORTCUT KEYBOARD: TEKAN ESC UNTUK FOKUS KE SCANNER BARCODE
+// SHORTCUT KEYBOARD: TEKAN F2 UNTUK FOKUS KE SCANNER BARCODE
 // =================================================================
 window.addEventListener('keyup', function(event) {
-  if (event.key === 'Escape' || event.key === 'Esc') {
-    // TIPS: Pastikan 'barcodeInput' di bawah ini sama persis dengan id di index.html Mas
+  // KITA UBAH MENJADI F2 (Karena F8-F11 sudah dipakai kasir)
+  if (event.key === 'F2') { 
     const scannerInput = document.getElementById('barcodeInput'); 
     if (scannerInput) {
       event.preventDefault();
-      event.stopPropagation(); // Mencegah library lain (seperti Bootstrap) ikut campur
+      event.stopPropagation(); 
       
-      setTimeout(() => {
-        scannerInput.focus();
-        scannerInput.select();
-      }, 50); // Diberi jeda 50 milidetik agar proses penutupan modal selesai dulu, baru kursor melompat
+      // Fokuskan kursor kembali
+      scannerInput.focus();
+      scannerInput.select();
     }
   }
 });
