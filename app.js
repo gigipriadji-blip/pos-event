@@ -545,15 +545,13 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
       saveToLocalStorage(payload); // Ini sudah otomatis mengeksekusi clearCart() di dalamnya
     }
   } // <--- Penutup fungsi executeFinalTransaction
-  function saveToLocalStorage(payload) {
+ function saveToLocalStorage(payload) {
   let offlineData = JSON.parse(localStorage.getItem('screamous_offline_trx')) || [];
   offlineData.push(payload);
   localStorage.setItem('screamous_offline_trx', JSON.stringify(offlineData));
   clearCart();
-  localStorage.setItem('screamous_offline_trx', JSON.stringify(offlineData));
-  clearCart();
-  
-  // KODE BARU: TOAST NOTIFICATION (Pengganti baris 553)
+
+  // KODE BARU: TOAST NOTIFICATION 
   Swal.fire({
     toast: true,
     position: 'top-end',
@@ -566,8 +564,6 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
     customClass: { popup: 'colored-toast' }
   });
 
-  if (typeof checkOfflineBadge === 'function') checkOfflineBadge(); // <-- Alarm ditambahkan di sini
-}
   if (typeof checkOfflineBadge === 'function') checkOfflineBadge(); // <-- Alarm ditambahkan di sini
 }
 
