@@ -1480,7 +1480,7 @@ window.addEventListener('keydown', function(event) {
 // =================================================================
 // ENGINE INTEGRASI CETAK CLOSING HARIAN (SESUAI TEMPLATE INDEX.HTML)
 // =================================================================
-function doPrintClosing() {
+window.printClosingReport = function() {
   const data = window.closingPrintData;
   
   if (!data) {
@@ -1509,15 +1509,4 @@ function doPrintClosing() {
   setTimeout(() => {
     window.print();
   }, 200);
-}
-
-// =================================================================
-// PEREKAT TOMBOL DI MODAL (ANTI BLIND-SPOT)
-// =================================================================
-document.addEventListener('click', function(event) {
-  // .closest('button') memastikan klik di logo/icon tetap mengenai tombol induknya
-  const btn = event.target.closest('button'); 
-  if (btn && btn.textContent.includes('PRINT STRUK CLOSING')) {
-    doPrintClosing();
-  }
-});
+};
