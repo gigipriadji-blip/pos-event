@@ -1483,47 +1483,41 @@ window.addEventListener('keydown', function(event) {
 function doPrintClosing() {
   const data = window.closingPrintData;
   
-  // 1. Validasi data closing
   if (!data) {
     Swal.fire('Opps', 'Data closing belum siap atau gagal dimuat!', 'warning');
     return;
   }
 
-  // 2. Suntikkan data dari memori ke elemen template HTML index.html
-  if (document.getElementById('pcShopName')) {
-    document.getElementById('pcShopName').innerText = (window.currentSettings && window.currentSettings.shopName) || 'SCREAMOUS';
-  }
-  if (document.getElementById('pcDateTitle')) {
-    document.getElementById('pcDateTitle').innerText = data.date;
-  }
-  if (document.getElementById('pcPrintDate')) {
-    const now = new Date();
-    document.getElementById('pcPrintDate').innerText = now.toLocaleString('id-ID');
-  }
-  
-  // Suntik rincian omset
-  if (document.getElementById('pcQty')) document.getElementById('pcQty').innerText = data.qty + ' Pcs';
-  if (document.getElementById('pcGross')) document.getElementById('pcGross').innerText = 'Rp ' + data.gross.toLocaleString('id-ID');
-  if (document.getElementById('pcDisc')) document.getElementById('pcDisc').innerText = 'Rp ' + data.disc.toLocaleString('id-ID');
-  if (document.getElementById('pcNet')) document.getElementById('pcNet').innerText = 'Rp ' + data.net.toLocaleString('id-ID');
-  
-  // Suntik rincian metode pembayaran
-  if (document.getElementById('pcCash')) document.getElementById('pcCash').innerText = 'Rp ' + data.cash.toLocaleString('id-ID');
-  if (document.getElementById('pcCard')) document.getElementById('pcCard').innerText = 'Rp ' + data.card.toLocaleString('id-ID');
-  if (document.getElementById('pcQris')) document.getElementById('pcQris').innerText = 'Rp ' + data.qris.toLocaleString('id-ID');
-  if (document.getElementById('pcTransfer')) document.getElementById('pcTransfer').innerText = 'Rp ' + data.transfer.toLocaleString('id-ID');
+  // Menyuntikkan data dari memori ke elemen template HTML index.html
+  const setEl = (id, val) => { if(document.getElementById(id)) document.getElementById(id).innerText = val; };
 
-  // 3. Picu dialog print browser
-  // (Memanfaatkan library print style yang biasanya menyembunyikan elemen lain & hanya memunculkan #printClosingArea)
-  window.print();
+  setEl('pcShopName', (window.currentSettings && window.currentSettings.shopName) || 'SCREAMOUS');
+  setEl('pcDateTitle', data.date);
+  setEl('pcPrintDate', new Date().toLocaleString('id-ID'));
+  
+  setEl('pcQty', data.qty + ' Pcs');
+  setEl('pcGross', 'Rp ' + data.gross.toLocaleString('id-ID'));
+  setEl('pcDisc', 'Rp ' + data.disc.toLocaleString('id-ID'));
+  setEl('pcNet', 'Rp ' + data.net.toLocaleString('id-ID'));
+  
+  setEl('pcCash', 'Rp ' + data.cash.toLocaleString('id-ID'));
+  setEl('pcCard', 'Rp ' + data.card.toLocaleString('id-ID'));
+  setEl('pcQris', 'Rp ' + data.qris.toLocaleString('id-ID'));
+  setEl('pcTransfer', 'Rp ' + data.transfer.toLocaleString('id-ID'));
+
+  // Eksekusi Print (Menambahkan jeda agar elemen HTML sempat ter-update)
+  setTimeout(() => {
+    window.print();
+  }, 200);
 }
 
 // =================================================================
-// PEREKAT TOMBOL DI MODAL (EVENT LISTENER)
+// PEREKAT TOMBOL DI MODAL (ANTI BLIND-SPOT)
 // =================================================================
 document.addEventListener('click', function(event) {
-  // Mencari elemen tombol berdasarkan teks atau class jika id dinamis
-  if (event.target && event.target.textContent.trim() === 'PRINT STRUK CLOSING') {
+  // .closest('button') memastikan klik di logo/icon tetap mengenai tombol induknya
+  const btn = event.target.closest('button'); 
+  if (btn && btn.textContent.includes('PRINT STRUK CLOSING')) {
     doPrintClosing();
   }
 });
