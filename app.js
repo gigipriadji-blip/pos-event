@@ -393,10 +393,13 @@ if(printToggle) printToggle.checked = (localStorage.getItem('screamous_autoprint
     togglePaymentUI();
 
     renderCart();
+    
     const scannerInput = document.getElementById('barcodeInput');
-  if (scannerInput) {
-    scannerInput.focus();
-  }
+    if (scannerInput) {
+      setTimeout(() => {
+        scannerInput.focus();
+      }, 500); // 🚀 Jeda 0.5 detik agar kursor tidak dijegal oleh animasi modal Bootstrap
+    }
 }
 
   function calculateTotal() {
@@ -1459,19 +1462,17 @@ if ('serviceWorker' in navigator) {
   });
 }
 // =================================================================
-// SHORTCUT KEYBOARD: TEKAN F2 UNTUK FOKUS KE SCANNER BARCODE
+// SHORTCUT MANUAL TOMBOL F2 KAPAN SAJA (Taruh di Paling Bawah File)
 // =================================================================
-window.addEventListener('keyup', function(event) {
-  // KITA UBAH MENJADI F2 (Karena F8-F11 sudah dipakai kasir)
-  if (event.key === 'F2') { 
-    const scannerInput = document.getElementById('barcodeInput'); 
+window.addEventListener('keydown', function(event) {
+  if (event.key === 'F2') {
+    const scannerInput = document.getElementById('barcodeInput');
     if (scannerInput) {
       event.preventDefault();
-      event.stopPropagation(); 
+      event.stopPropagation();
       
-      // Fokuskan kursor kembali
       scannerInput.focus();
       scannerInput.select();
     }
   }
-});
+}, true); // Parameter 'true' ini wajib agar shortcut ini tidak diblokir komponen lain
